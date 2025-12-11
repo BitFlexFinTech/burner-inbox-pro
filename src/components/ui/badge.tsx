@@ -8,16 +8,24 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-        secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-        outline: "text-foreground",
+        default: "border-transparent bg-primary text-primary-foreground",
+        secondary: "border-transparent bg-secondary text-secondary-foreground",
+        destructive: "border-transparent bg-destructive text-destructive-foreground",
+        outline: "text-foreground border-border",
+        // Neon variants
+        neon: "border-primary/50 bg-primary/20 text-primary shadow-[0_0_10px_hsl(185_100%_50%/0.3)]",
+        "neon-magenta": "border-secondary/50 bg-secondary/20 text-secondary shadow-[0_0_10px_hsl(320_100%_50%/0.3)]",
+        "neon-purple": "border-accent/50 bg-accent/20 text-accent shadow-[0_0_10px_hsl(270_100%_60%/0.3)]",
+        "neon-green": "border-neon-green/50 bg-neon-green/20 text-neon-green shadow-[0_0_10px_hsl(150_100%_50%/0.3)]",
+        "neon-orange": "border-neon-orange/50 bg-neon-orange/20 text-neon-orange shadow-[0_0_10px_hsl(30_100%_55%/0.3)]",
+        pro: "border-transparent bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg",
+        free: "border-border bg-muted text-muted-foreground",
       },
     },
     defaultVariants: {
       variant: "default",
     },
-  },
+  }
 );
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
