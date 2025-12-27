@@ -1,3 +1,5 @@
+@import "@fontsource/outfit/200.css";
+@import "@fontsource/outfit/300.css";
 @import "@fontsource/outfit/400.css";
 @import "@fontsource/outfit/500.css";
 @import "@fontsource/outfit/600.css";
@@ -85,11 +87,21 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Outfit', system-ui, sans-serif;
+    font-weight: 300;
+    letter-spacing: 0.01em;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Outfit', system-ui, sans-serif;
-    @apply font-semibold tracking-tight;
+    @apply font-extralight tracking-tight;
+  }
+
+  h1 {
+    @apply font-extralight;
+  }
+
+  h2, h3 {
+    @apply font-light;
   }
 
   code, pre, .mono {
@@ -98,6 +110,12 @@
 }
 
 @layer utilities {
+  /* Thin font utility */
+  .font-thin-display {
+    font-weight: 200;
+    letter-spacing: 0.02em;
+  }
+
   /* Neon text effects */
   .text-neon-cyan {
     color: hsl(var(--primary));
@@ -227,8 +245,8 @@
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -237,7 +255,7 @@
 
 ::-webkit-scrollbar-thumb {
   background: hsl(240 15% 20%);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {

@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   ArrowLeft,
   Mail, 
@@ -14,92 +19,45 @@ import {
   Clock,
   ExternalLink,
   FileText,
-  Code
+  Code,
+  Inbox,
+  Archive,
+  Trash2,
+  Star,
+  MoreHorizontal,
+  Phone
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { db } from "@/lib/mockDatabase";
+import { useAppMode } from "@/contexts/AppModeContext";
+import type { Message } from "@/types/database";
+import { cn } from "@/lib/utils";
 
-// Mock messages
-const mockMessages = [
-  {
-    id: "1",
-    from: "noreply@netflix.com",
-    fromName: "Netflix",
-    subject: "Verify your email address",
-    preview: "Your verification code is: 847291. Enter this code to verify your email...",
-    bodyHtml: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #E50914;">Welcome to Netflix!</h1>
-        <p>Thank you for signing up. Please verify your email address by entering the code below:</p>
-        <div style="background: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
-          <span style="font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #333;">847291</span>
-        </div>
-        <p>This code will expire in 10 minutes.</p>
-        <p>If you didn't create an account, you can safely ignore this email.</p>
-      </div>
-    `,
-    bodyText: "Your verification code is: 847291. Enter this code to verify your email address.",
-    timestamp: "2 min ago",
-    read: false,
-    verificationCode: "847291",
-  },
-  {
-    id: "2",
-    from: "hello@netflix.com",
-    fromName: "Netflix",
-    subject: "Welcome to Netflix!",
-    preview: "Start watching your favorite movies and TV shows today...",
-    bodyHtml: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #E50914;">You're all set!</h1>
-        <p>Your Netflix account is now active. Start exploring thousands of movies and TV shows.</p>
-        <a href="#" style="display: inline-block; background: #E50914; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0;">Start Watching</a>
-      </div>
-    `,
-    bodyText: "Your Netflix account is now active. Start exploring thousands of movies and TV shows.",
-    timestamp: "5 min ago",
-    read: true,
-    verificationCode: null,
-  },
-  {
-    id: "3",
-    from: "security@netflix.com",
-    fromName: "Netflix Security",
-    subject: "New sign-in to your account",
-    preview: "We noticed a new sign-in to your Netflix account from Chrome on Windows...",
-    bodyHtml: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1>New sign-in detected</h1>
-        <p>We noticed a new sign-in to your Netflix account:</p>
-        <ul>
-          <li>Device: Chrome on Windows</li>
-          <li>Location: New York, USA</li>
-          <li>Time: ${new Date().toLocaleString()}</li>
-        </ul>
-        <p>If this wasn't you, please secure your account immediately.</p>
-      </div>
-    `,
-    bodyText: "We noticed a new sign-in to your Netflix account from Chrome on Windows.",
-    timestamp: "1 hour ago",
-    read: true,
-    verificationCode: null,
-  },
-];
+type Folder = 'inbox' | 'starred' | 'archive' | 'trash';
 
 export default function InboxView() {
   const { id } = useParams();
   const { toast } = useToast();
-  const [messages] = useState(mockMessages);
-  const [selectedMessage, setSelectedMessage] = useState(mockMessages[0]);
+  const { isDemo } = useAppMode();
+  
+  const inbox = useMemo(() => db.getInbox(id || ''), [id]);
+  const allMessages = useMemo(() => db.getMessages(id), [id]);
+  
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(allMessages[0] || null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"html" | "text">("html");
+  const [activeFolder, setActiveFolder] = useState<Folder>('inbox');
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
 
-  const inboxEmail = "netflix_test_7x9@demoinbox.app";
+  const inboxEmail = inbox?.emailAddress || "demo@burnermail.app";
 
-  const filteredMessages = messages.filter(
-    (msg) =>
+  const filteredMessages = useMemo(() => {
+    return allMessages.filter((msg) =>
       msg.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      msg.from.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      msg.fromAddress.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      msg.fromName.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [allMessages, searchQuery]);
 
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -117,207 +75,355 @@ export default function InboxView() {
     });
   };
 
-  return (
-    <div className="min-h-screen bg-background bg-grid">
-      {/* Background effects */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-1/4 left-1/4 w-64 h-64 bg-secondary/10 rounded-full blur-[100px]" />
-      </div>
+  const toggleStar = (msgId: string) => {
+    setStarredIds(prev => {
+      const next = new Set(prev);
+      if (next.has(msgId)) {
+        next.delete(msgId);
+      } else {
+        next.add(msgId);
+      }
+      return next;
+    });
+  };
 
-      <div className="relative min-h-screen flex flex-col">
-        {/* Header */}
-        <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" asChild>
-                <Link to="/dashboard">
-                  <ArrowLeft className="h-4 w-4" />
-                </Link>
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    
+    if (diff < 3600000) {
+      const mins = Math.floor(diff / 60000);
+      return `${mins}m ago`;
+    } else if (diff < 86400000) {
+      const hours = Math.floor(diff / 3600000);
+      return `${hours}h ago`;
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+  };
+
+  const folders = [
+    { id: 'inbox' as Folder, label: 'Inbox', icon: Inbox, count: allMessages.filter(m => !m.isRead).length },
+    { id: 'starred' as Folder, label: 'Starred', icon: Star, count: starredIds.size },
+    { id: 'archive' as Folder, label: 'Archive', icon: Archive, count: 0 },
+    { id: 'trash' as Folder, label: 'Trash', icon: Trash2, count: 0 },
+  ];
+
+  return (
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
+      {/* Header */}
+      <header className="flex-shrink-0 border-b border-border/30 bg-card/50 backdrop-blur-xl">
+        <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+              <Link to="/dashboard">
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+            <div className="h-4 w-px bg-border/50" />
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-primary" />
+              <span className="font-mono text-xs text-muted-foreground">{inboxEmail}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={copyEmail}
+              >
+                <Copy className="h-3 w-3" />
               </Button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-primary" />
-                  <h1 className="font-mono text-sm">{inboxEmail}</h1>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={copyEmail}
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {messages.length} messages
-                </p>
-              </div>
             </div>
-            <Button variant="outline" size="icon">
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs font-light">
+              {allMessages.length} messages
+            </Badge>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {/* Main Content - Two Pane Layout */}
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-          {/* Message List */}
-          <div className="w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r border-border/50 bg-card/30 backdrop-blur-sm overflow-y-auto">
-            <div className="p-4 border-b border-border/50">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search messages..."
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="divide-y divide-border/50">
-              {filteredMessages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className={`p-4 cursor-pointer transition-colors ${
-                    selectedMessage.id === message.id
-                      ? "bg-primary/10 border-l-2 border-l-primary"
-                      : "hover:bg-muted/50"
-                  }`}
-                  onClick={() => setSelectedMessage(message)}
-                >
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      {!message.read && (
-                        <div className="w-2 h-2 rounded-full bg-primary" />
+      {/* Main Content - Three Pane Mac Mail Layout */}
+      <div className="flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {/* Left Sidebar - Folders */}
+          <ResizablePanel defaultSize={15} minSize={12} maxSize={20}>
+            <div className="h-full bg-sidebar/50 border-r border-border/30">
+              <div className="p-3">
+                <p className="text-[10px] font-light uppercase tracking-wider text-muted-foreground mb-2 px-2">
+                  Folders
+                </p>
+                <nav className="space-y-0.5">
+                  {folders.map((folder) => (
+                    <button
+                      key={folder.id}
+                      onClick={() => setActiveFolder(folder.id)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm font-light transition-colors",
+                        activeFolder === folder.id
+                          ? "bg-primary/20 text-primary"
+                          : "text-foreground/80 hover:bg-muted/50"
                       )}
-                      <span className="font-medium text-sm">
-                        {message.fromName}
-                      </span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {message.timestamp}
-                    </span>
-                  </div>
-                  <p className="text-sm font-medium mb-1 truncate">
-                    {message.subject}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {message.preview}
-                  </p>
-                  {message.verificationCode && (
-                    <Badge variant="neon" className="mt-2">
-                      Code: {message.verificationCode}
-                    </Badge>
-                  )}
-                </motion.div>
-              ))}
-            </div>
-          </div>
+                    >
+                      <folder.icon className="h-3.5 w-3.5" />
+                      <span className="flex-1 text-left">{folder.label}</span>
+                      {folder.count > 0 && (
+                        <span className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded-full",
+                          activeFolder === folder.id
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        )}>
+                          {folder.count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </nav>
+              </div>
 
-          {/* Message Preview */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {selectedMessage ? (
-              <motion.div
-                key={selectedMessage.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                {/* Message Header */}
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold mb-2">
-                    {selectedMessage.subject}
-                  </h2>
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>From: {selectedMessage.from}</span>
-                      <span>•</span>
-                      <Clock className="h-3 w-3" />
-                      <span>{selectedMessage.timestamp}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant={viewMode === "html" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setViewMode("html")}
-                      >
-                        <FileText className="h-3 w-3 mr-1" />
-                        HTML
-                      </Button>
-                      <Button
-                        variant={viewMode === "text" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setViewMode("text")}
-                      >
-                        <Code className="h-3 w-3 mr-1" />
-                        Text
-                      </Button>
-                    </div>
+              {isDemo && (
+                <div className="absolute bottom-4 left-2 right-2">
+                  <div className="bg-muted/30 rounded-lg p-2 text-center">
+                    <Phone className="h-3 w-3 mx-auto mb-1 text-muted-foreground" />
+                    <p className="text-[10px] text-muted-foreground font-light">
+                      SMS available on Pro
+                    </p>
                   </div>
                 </div>
+              )}
+            </div>
+          </ResizablePanel>
 
-                {/* Verification Code Card */}
-                {selectedMessage.verificationCode && (
-                  <Card variant="neon" className="mb-6">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
+          <ResizableHandle className="w-px bg-border/30 hover:bg-primary/50 transition-colors" />
+
+          {/* Middle Panel - Message List */}
+          <ResizablePanel defaultSize={30} minSize={25} maxSize={40}>
+            <div className="h-full flex flex-col bg-card/30">
+              {/* Search */}
+              <div className="flex-shrink-0 p-2 border-b border-border/30">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search messages..."
+                    className="pl-8 h-8 text-sm font-light bg-muted/30 border-border/30"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Message List */}
+              <ScrollArea className="flex-1">
+                <div className="divide-y divide-border/20">
+                  {filteredMessages.map((message) => (
+                    <motion.div
+                      key={message.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className={cn(
+                        "px-3 py-2.5 cursor-pointer transition-colors group",
+                        selectedMessage?.id === message.id
+                          ? "bg-primary/15"
+                          : "hover:bg-muted/30"
+                      )}
+                      onClick={() => {
+                        setSelectedMessage(message);
+                        if (!message.isRead) {
+                          db.markMessageRead(message.id);
+                        }
+                      }}
+                    >
+                      <div className="flex items-start gap-2">
+                        {/* Unread indicator */}
+                        <div className="pt-1.5">
+                          {!message.isRead ? (
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          ) : (
+                            <div className="w-2 h-2" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          {/* Sender & Time */}
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className={cn(
+                              "text-sm truncate",
+                              !message.isRead ? "font-medium" : "font-light"
+                            )}>
+                              {message.fromName}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-light flex-shrink-0 ml-2">
+                              {formatTime(message.receivedAt)}
+                            </span>
+                          </div>
+
+                          {/* Subject */}
+                          <p className={cn(
+                            "text-xs truncate mb-0.5",
+                            !message.isRead ? "text-foreground" : "text-foreground/80"
+                          )}>
+                            {message.subject}
+                          </p>
+
+                          {/* Preview */}
+                          <p className="text-[11px] text-muted-foreground font-light line-clamp-2">
+                            {message.bodyText.substring(0, 100)}...
+                          </p>
+
+                          {/* Verification code badge */}
+                          {message.verificationCode && (
+                            <Badge variant="neon" className="mt-1.5 text-[10px] py-0 px-1.5">
+                              Code: {message.verificationCode}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Star button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleStar(message.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Star className={cn(
+                            "h-3.5 w-3.5",
+                            starredIds.has(message.id)
+                              ? "fill-neon-orange text-neon-orange"
+                              : "text-muted-foreground"
+                          )} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle className="w-px bg-border/30 hover:bg-primary/50 transition-colors" />
+
+          {/* Right Panel - Message Preview */}
+          <ResizablePanel defaultSize={55}>
+            <div className="h-full flex flex-col bg-background">
+              {selectedMessage ? (
+                <>
+                  {/* Message Header */}
+                  <div className="flex-shrink-0 p-4 border-b border-border/30">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-lg font-light mb-1 truncate">
+                          {selectedMessage.subject}
+                        </h2>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground font-light">
+                          <span>From: {selectedMessage.fromName} &lt;{selectedMessage.fromAddress}&gt;</span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {formatTime(selectedMessage.receivedAt)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 ml-4">
+                        <Button
+                          variant={viewMode === "html" ? "default" : "ghost"}
+                          size="sm"
+                          className="h-7 text-xs font-light"
+                          onClick={() => setViewMode("html")}
+                        >
+                          <FileText className="h-3 w-3 mr-1" />
+                          HTML
+                        </Button>
+                        <Button
+                          variant={viewMode === "text" ? "default" : "ghost"}
+                          size="sm"
+                          className="h-7 text-xs font-light"
+                          onClick={() => setViewMode("text")}
+                        >
+                          <Code className="h-3 w-3 mr-1" />
+                          Text
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Verification Code Card */}
+                  {selectedMessage.verificationCode && (
+                    <div className="flex-shrink-0 mx-4 mt-4">
+                      <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-muted-foreground mb-1">
+                          <p className="text-xs text-muted-foreground font-light mb-1">
                             Verification Code Detected
                           </p>
-                          <code className="text-3xl font-mono font-bold text-primary">
+                          <code className="text-2xl font-mono font-medium text-primary tracking-widest">
                             {selectedMessage.verificationCode}
                           </code>
                         </div>
                         <Button
                           variant="neon"
-                          onClick={() =>
-                            copyCode(selectedMessage.verificationCode!)
-                          }
+                          size="sm"
+                          onClick={() => copyCode(selectedMessage.verificationCode!)}
                         >
-                          <Copy className="h-4 w-4 mr-2" />
-                          Copy Code
+                          <Copy className="h-3.5 w-3.5 mr-1.5" />
+                          Copy
                         </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
+                    </div>
+                  )}
 
-                {/* Message Body */}
-                <Card variant="glass">
-                  <CardContent className="p-6">
-                    {viewMode === "html" ? (
-                      <div
-                        className="prose prose-invert max-w-none"
-                        dangerouslySetInnerHTML={{
-                          __html: selectedMessage.bodyHtml,
-                        }}
-                      />
-                    ) : (
-                      <pre className="whitespace-pre-wrap font-mono text-sm text-muted-foreground">
-                        {selectedMessage.bodyText}
-                      </pre>
-                    )}
-                  </CardContent>
-                </Card>
+                  {/* Message Body */}
+                  <ScrollArea className="flex-1 p-4">
+                    <div className="bg-card/50 rounded-lg p-6 border border-border/30">
+                      {viewMode === "html" ? (
+                        <div
+                          className="prose prose-invert prose-sm max-w-none font-light"
+                          dangerouslySetInnerHTML={{
+                            __html: selectedMessage.bodyHtml,
+                          }}
+                        />
+                      ) : (
+                        <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+                          {selectedMessage.bodyText}
+                        </pre>
+                      )}
+                    </div>
+                  </ScrollArea>
 
-                {/* Actions */}
-                <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm">
-                    <ExternalLink className="h-3 w-3 mr-1" />
-                    Open in New Tab
-                  </Button>
+                  {/* Footer Actions */}
+                  <div className="flex-shrink-0 p-3 border-t border-border/30">
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="text-xs font-light">
+                        <ExternalLink className="h-3 w-3 mr-1.5" />
+                        Open in New Tab
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-xs font-light">
+                        <Archive className="h-3 w-3 mr-1.5" />
+                        Archive
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-xs font-light text-destructive">
+                        <Trash2 className="h-3 w-3 mr-1.5" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Mail className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="font-light">Select a message to view</p>
+                  </div>
                 </div>
-              </motion.div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <p>Select a message to view</p>
-              </div>
-            )}
-          </div>
-        </div>
+              )}
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
     </div>
   );
