@@ -17,7 +17,8 @@ import {
   RefreshCw,
   Crown,
   MoreHorizontal,
-  AlertCircle
+  AlertCircle,
+  Forward
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -263,6 +264,12 @@ export default function Dashboard() {
                             <Badge variant="outline" className="text-xs">
                               {messageCount} messages
                             </Badge>
+                            {inbox.forwardingEnabled && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Forward className="h-3 w-3 mr-1" />
+                                Forwarding
+                              </Badge>
+                            )}
                           </div>
                           <Button
                             variant="ghost"
@@ -279,6 +286,11 @@ export default function Dashboard() {
                             {inbox.emailAddress}
                           </p>
                         </Link>
+                        {inbox.forwardingEmail && (
+                          <p className="text-xs text-muted-foreground mb-2 truncate">
+                            → {inbox.forwardingEmail}
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground mb-4">
                           Last activity: {formatLastActivity(inbox)}
                         </p>
