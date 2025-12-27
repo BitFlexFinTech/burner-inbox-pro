@@ -14,7 +14,8 @@ import type {
   UserQuota,
   SMSMessage,
   UserRoleRecord,
-  UserRoleType
+  UserRoleType,
+  ForwardingLog
 } from '@/types/database';
 
 const DB_KEY = 'burnermail_db';
@@ -297,6 +298,37 @@ const demoNotifications: SiteNotification[] = [
   },
 ];
 
+// Demo SMS messages
+const demoSMSMessages: SMSMessage[] = [
+  {
+    id: 'sms_1',
+    inboxId: 'inbox_1',
+    phoneNumber: '+12125551234',
+    fromNumber: '+18005551234',
+    body: 'Your verification code is: 847291. It expires in 10 minutes.',
+    receivedAt: new Date(Date.now() - 120000).toISOString(),
+    isRead: false,
+  },
+  {
+    id: 'sms_2',
+    inboxId: 'inbox_1',
+    phoneNumber: '+12125551234',
+    fromNumber: '+18885554321',
+    body: 'Your one-time password is 529304. Do not share this code.',
+    receivedAt: new Date(Date.now() - 3600000).toISOString(),
+    isRead: true,
+  },
+  {
+    id: 'sms_3',
+    inboxId: 'inbox_1',
+    phoneNumber: '+12125551234',
+    fromNumber: '+15551234567',
+    body: 'Your bank verification code is 193847. Valid for 5 minutes.',
+    receivedAt: new Date(Date.now() - 7200000).toISOString(),
+    isRead: true,
+  },
+];
+
 // Initial database state
 const getInitialState = (): DatabaseState => ({
   users: [demoUser],
@@ -318,7 +350,8 @@ const getInitialState = (): DatabaseState => ({
       lastResetAt: new Date().toISOString(),
     },
   ],
-  smsMessages: [],
+  smsMessages: demoSMSMessages,
+  forwardingLogs: [],
 });
 
 // Database class for localStorage operations
@@ -672,6 +705,103 @@ class MockDatabase {
 
   getAuditLogs(limit = 100): AuditLog[] {
     return this.state.auditLogs.slice(0, limit);
+  }
+
+  // SMS Messages
+  getSMSMessages(inboxId?: string): SMSMessage[] {
+    if (inboxId) {
+      return this.state.smsMessages.filter(s => s.inboxId === inboxId);
+    }
+    return this.state.smsMessages;
+  }
+
+  // Forwarding Logs
+  addForwardingLog(log: Omit<ForwardingLog, 'id' | 'createdAt'>): ForwardingLog {
+    const newLog: ForwardingLog = {
+      ...log,
+      id: `fwd_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    this.state.forwardingLogs.unshift(newLog);
+    this.save();
+    return newLog;
+  }
+
+  getForwardingLogs(inboxId?: string): ForwardingLog[] {
+    if (inboxId) {
+      return this.state.forwardingLogs.filter(l => l.inboxId === inboxId);
+    }
+    return this.state.forwardingLogs;
+  }
+
+  // Chart Data Methods
+  getRevenueHistory(days: number = 30): { date: string; revenue: number; transactions: number }[] {
+    const data: { date: string; revenue: number; transactions: number }[] = [];
+    const now = new Date();
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Generate realistic mock revenue data with some randomness
+      const baseRevenue = 50 + Math.random() * 100;
+      const weekendMultiplier = [0, 6].includes(date.getDay()) ? 0.7 : 1;
+      const trend = 1 + (days - i) / days * 0.3; // Upward trend
+      
+      data.push({
+        date: dateStr,
+        revenue: Math.round(baseRevenue * weekendMultiplier * trend * 100) / 100,
+        transactions: Math.floor(3 + Math.random() * 10 * weekendMultiplier * trend),
+      });
+    }
+    
+    return data;
+  }
+
+  getUserGrowthHistory(days: number = 30): { date: string; users: number; newSignups: number }[] {
+    const data: { date: string; users: number; newSignups: number }[] = [];
+    const now = new Date();
+    let totalUsers = 150 + Math.floor(Math.random() * 50);
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const newSignups = Math.floor(2 + Math.random() * 8);
+      totalUsers += newSignups;
+      
+      data.push({
+        date: dateStr,
+        users: totalUsers,
+        newSignups,
+      });
+    }
+    
+    return data;
+  }
+
+  getInboxHistory(days: number = 30): { date: string; created: number; expired: number }[] {
+    const data: { date: string; created: number; expired: number }[] = [];
+    const now = new Date();
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const created = Math.floor(10 + Math.random() * 30);
+      const expired = Math.floor(5 + Math.random() * 20);
+      
+      data.push({
+        date: dateStr,
+        created,
+        expired,
+      });
+    }
+    
+    return data;
   }
 }
 

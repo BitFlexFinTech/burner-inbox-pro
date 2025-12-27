@@ -43,6 +43,11 @@ export interface Inbox {
   createdAt: string;
   expiresAt: string;
   isActive: boolean;
+  // Forwarding fields
+  forwardingEnabled?: boolean;
+  forwardingEmail?: string;
+  // SMS fields
+  phoneNumber?: string;
 }
 
 export interface Message {
@@ -141,6 +146,15 @@ export interface SMSMessage {
   isRead: boolean;
 }
 
+export interface ForwardingLog {
+  id: string;
+  inboxId: string;
+  messageId: string;
+  forwardedTo: string;
+  status: 'success' | 'failed';
+  createdAt: string;
+}
+
 // Database state type
 export interface DatabaseState {
   users: User[];
@@ -156,4 +170,5 @@ export interface DatabaseState {
   auditLogs: AuditLog[];
   userQuotas: UserQuota[];
   smsMessages: SMSMessage[];
+  forwardingLogs: ForwardingLog[];
 }

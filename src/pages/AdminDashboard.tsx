@@ -8,15 +8,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { db } from "@/lib/mockDatabase";
 import { useToast } from "@/hooks/use-toast";
+import { RevenueChart } from "@/components/admin/RevenueChart";
+import { UserGrowthChart } from "@/components/admin/UserGrowthChart";
+import { InboxActivityChart } from "@/components/admin/InboxActivityChart";
 import type { SiteNotification, NotificationType, TargetAudience, Integration } from "@/types/database";
 import { 
   LayoutDashboard, Users, Mail, DollarSign, Activity, TrendingUp, TrendingDown,
-  Wallet, Bitcoin, Bug, MessageSquare, Search, RefreshCw, ArrowLeft,
-  CheckCircle, XCircle, Clock, AlertTriangle, Bell, Plug, Plus, Trash2, Edit, Loader2
+  Wallet, Bitcoin, Bug, MessageSquare, RefreshCw, ArrowLeft,
+  CheckCircle, XCircle, Clock, Bell, Plug, Plus, Trash2, Edit, Loader2
 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -42,14 +45,22 @@ export default function AdminDashboard() {
   // Transactions from DB
   const transactions = db.getCryptoTransactions();
 
+  // Chart data
+  const revenueData = db.getRevenueHistory(30);
+  const userGrowthData = db.getUserGrowthHistory(30);
+  const inboxActivityData = db.getInboxHistory(30);
+
   // KPIs from DB
   const users = db.getUsers();
   const inboxes = db.getInboxes();
+  const totalRevenue = revenueData.reduce((sum, d) => sum + d.revenue, 0);
+  const totalNewUsers = userGrowthData.reduce((sum, d) => sum + d.newSignups, 0);
+  
   const kpis = [
-    { title: "Monthly Revenue", value: `$${transactions.filter(t => t.status === 'confirmed').reduce((sum, t) => sum + t.amountUsd, 0).toFixed(2)}`, change: "+12.5%", trend: "up", icon: DollarSign },
+    { title: "Monthly Revenue", value: `$${totalRevenue.toFixed(2)}`, change: "+12.5%", trend: "up", icon: DollarSign },
     { title: "Active Users", value: users.length.toString(), change: "+8.2%", trend: "up", icon: Users },
     { title: "Total Inboxes", value: inboxes.length.toString(), change: "+15.3%", trend: "up", icon: Mail },
-    { title: "Churn Rate", value: "2.4%", change: "-0.3%", trend: "down", icon: Activity },
+    { title: "New Signups (30d)", value: totalNewUsers.toString(), change: "+22.1%", trend: "up", icon: Activity },
   ];
 
   const saveWallet = (walletId: string) => {
@@ -146,6 +157,7 @@ export default function AdminDashboard() {
             {/* Overview */}
             {activeTab === "overview" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+                {/* KPI Cards */}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   {kpis.map((kpi, i) => (
                     <Card key={kpi.title} variant={i === 0 ? "neon" : "default"}>
@@ -162,6 +174,39 @@ export default function AdminDashboard() {
                     </Card>
                   ))}
                 </div>
+
+                {/* Charts Row 1 */}
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg font-medium">Revenue Trend</CardTitle>
+                      <CardDescription>Last 30 days revenue performance</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <RevenueChart data={revenueData} />
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg font-medium">User Growth</CardTitle>
+                      <CardDescription>New signups and total user count</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <UserGrowthChart data={userGrowthData} />
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Charts Row 2 */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg font-medium">Inbox Activity</CardTitle>
+                    <CardDescription>Inboxes created vs expired over time</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <InboxActivityChart data={inboxActivityData} />
+                  </CardContent>
+                </Card>
               </motion.div>
             )}
 
