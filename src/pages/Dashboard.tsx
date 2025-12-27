@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Plus, 
   Mail, 
@@ -18,12 +18,17 @@ import {
   Crown,
   MoreHorizontal,
   AlertCircle,
-  Forward
+  Forward,
+  X,
+  Code
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuota } from "@/hooks/useQuota";
 import { db } from "@/lib/mockDatabase";
+import { ExpirationTimer } from "@/components/ExpirationTimer";
+import { TagBadge, getTagById, INBOX_TAGS } from "@/components/TagBadge";
+import { TagSelector, BulkTagSelector } from "@/components/TagSelector";
 import {
   Dialog,
   DialogContent,
@@ -31,15 +36,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Dashboard() {
   const { toast } = useToast();
   const { user, logout } = useAuth();
   const { canCreateInbox, remainingInboxes, incrementQuota, isUnlimited, planConfig } = useQuota();
+  const navigate = useNavigate();
   
   const [searchQuery, setSearchQuery] = useState("");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const inboxes = useMemo(() => {
     return db.getInboxes(user?.id);
@@ -48,6 +73,31 @@ export default function Dashboard() {
   const filteredInboxes = inboxes.filter((inbox) =>
     inbox.emailAddress.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const allSelected = filteredInboxes.length > 0 && filteredInboxes.every(i => selectedIds.has(i.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelect = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredInboxes.map(i => i.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
 
   const createInbox = () => {
     if (!canCreateInbox) {
@@ -79,7 +129,8 @@ export default function Dashboard() {
     });
   };
 
-  const copyEmail = (email: string) => {
+  const copyEmail = (email: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     navigator.clipboard.writeText(email);
     toast({
       title: "Copied!",
@@ -87,13 +138,51 @@ export default function Dashboard() {
     });
   };
 
-  const deleteInbox = (id: string) => {
+  const deleteInbox = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     db.deleteInbox(id);
+    selectedIds.delete(id);
+    setSelectedIds(new Set(selectedIds));
     setRefreshKey(prev => prev + 1);
     toast({
       title: "Inbox deleted",
       description: "The inbox has been permanently removed.",
     });
+  };
+
+  const bulkDelete = () => {
+    const count = db.deleteInboxes(Array.from(selectedIds));
+    setSelectedIds(new Set());
+    setRefreshKey(prev => prev + 1);
+    setShowBulkDeleteDialog(false);
+    toast({
+      title: `${count} inbox${count !== 1 ? 'es' : ''} deleted`,
+      description: "Selected inboxes have been permanently removed.",
+    });
+  };
+
+  const bulkAddTags = (tagIds: string[]) => {
+    db.bulkAddTags(Array.from(selectedIds), tagIds);
+    setRefreshKey(prev => prev + 1);
+    toast({
+      title: "Tags added",
+      description: `Added ${tagIds.length} tag${tagIds.length !== 1 ? 's' : ''} to ${selectedIds.size} inbox${selectedIds.size !== 1 ? 'es' : ''}.`,
+    });
+  };
+
+  const extendInbox = (id: string) => {
+    const minutes = planConfig?.lifespanMinutes || 60;
+    db.extendInbox(id, minutes);
+    setRefreshKey(prev => prev + 1);
+    toast({
+      title: "Inbox extended",
+      description: `Extended by ${minutes} minutes.`,
+    });
+  };
+
+  const updateInboxTags = (inboxId: string, newTags: string[]) => {
+    db.updateInbox(inboxId, { tags: newTags });
+    setRefreshKey(prev => prev + 1);
   };
 
   const formatLastActivity = (inbox: typeof inboxes[0]) => {
@@ -105,13 +194,13 @@ export default function Dashboard() {
     
     if (diff < 3600000) {
       const mins = Math.floor(diff / 60000);
-      return `${mins} min ago`;
+      return `${mins}m`;
     } else if (diff < 86400000) {
       const hours = Math.floor(diff / 3600000);
-      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+      return `${hours}h`;
     } else {
       const days = Math.floor(diff / 86400000);
-      return `${days} day${days > 1 ? 's' : ''} ago`;
+      return `${days}d`;
     }
   };
 
@@ -146,6 +235,13 @@ export default function Dashboard() {
               Inboxes
             </Link>
             <Link
+              to="/api-docs"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <Code className="h-4 w-4" />
+              API Docs
+            </Link>
+            <Link
               to="/settings"
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
             >
@@ -155,7 +251,7 @@ export default function Dashboard() {
           </nav>
 
           <div className="p-4 border-t border-border/50">
-            <Card variant="neon" className="p-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant={currentPlan === "free" ? "free" : "pro"}>
                   {currentPlan !== "free" && <Crown className="w-3 h-3 mr-1" />}
@@ -173,7 +269,7 @@ export default function Dashboard() {
                   <Link to="/pricing">Upgrade</Link>
                 </Button>
               )}
-            </Card>
+            </div>
 
             <Button
               variant="ghost"
@@ -187,14 +283,14 @@ export default function Dashboard() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-h-screen">
+        <main className="flex-1 min-h-screen flex flex-col">
           {/* Header */}
           <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
             <div className="flex items-center justify-between p-4">
               <div>
                 <h1 className="text-2xl font-bold">Your Inboxes</h1>
                 <p className="text-sm text-muted-foreground">
-                  Manage your disposable email addresses
+                  {filteredInboxes.length} inbox{filteredInboxes.length !== 1 ? 'es' : ''}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -215,12 +311,10 @@ export default function Dashboard() {
                 </Button>
               </div>
             </div>
-          </header>
 
-          <div className="p-6">
-            {/* Search */}
-            <div className="mb-6">
-              <div className="relative max-w-md">
+            {/* Search & Bulk Actions Bar */}
+            <div className="px-4 pb-4 flex items-center gap-4">
+              <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search inboxes..."
@@ -229,119 +323,192 @@ export default function Dashboard() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
+
+              {/* Bulk Actions */}
+              {someSelected && (
+                <motion.div 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-1.5"
+                >
+                  <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                  <div className="h-4 w-px bg-border" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setShowBulkDeleteDialog(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Delete
+                  </Button>
+                  <BulkTagSelector onApplyTags={bulkAddTags} />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={clearSelection}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </motion.div>
+              )}
+            </div>
+          </header>
+
+          {/* Inbox List - Mac Mail Style */}
+          <div className="flex-1 overflow-auto">
+            {/* List Header */}
+            <div className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm border-b border-border/50">
+              <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 px-4 py-2 text-xs font-medium text-muted-foreground">
+                <div className="w-6 flex items-center">
+                  <Checkbox 
+                    checked={allSelected}
+                    onCheckedChange={toggleSelectAll}
+                    className="h-3.5 w-3.5"
+                  />
+                </div>
+                <div>Email Address</div>
+                <div className="w-24 text-center">Tags</div>
+                <div className="w-16 text-center">Messages</div>
+                <div className="w-16 text-center">Activity</div>
+                <div className="w-20 text-center">Expires</div>
+              </div>
             </div>
 
-            {/* Inbox Grid */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-            >
+            {/* Inbox Rows */}
+            <div className="divide-y divide-border/30">
               {filteredInboxes.map((inbox, index) => {
                 const messageCount = db.getMessages(inbox.id).length;
+                const isSelected = selectedIds.has(inbox.id);
+                const isExpired = new Date(inbox.expiresAt) < new Date();
                 
                 return (
                   <motion.div
                     key={inbox.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: index * 0.02 }}
+                    onClick={() => navigate(`/inbox/${inbox.id}`)}
+                    className={`
+                      grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 px-4 py-3
+                      cursor-pointer transition-colors
+                      ${isSelected ? 'bg-primary/10' : 'hover:bg-muted/30'}
+                      ${isExpired ? 'opacity-60' : ''}
+                    `}
                   >
-                    <Card
-                      variant={inbox.isActive ? "neon" : "default"}
-                      className="group cursor-pointer hover:scale-[1.02] transition-transform"
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`w-2 h-2 rounded-full ${
-                                inbox.isActive
-                                  ? "bg-neon-green animate-pulse"
-                                  : "bg-muted-foreground"
-                              }`}
-                            />
-                            <Badge variant="outline" className="text-xs">
-                              {messageCount} messages
-                            </Badge>
-                            {inbox.forwardingEnabled && (
-                              <Badge variant="secondary" className="text-xs">
-                                <Forward className="h-3 w-3 mr-1" />
-                                Forwarding
-                              </Badge>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
+                    {/* Checkbox */}
+                    <div className="w-6 flex items-center" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox 
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelect(inbox.id)}
+                        className="h-3.5 w-3.5"
+                      />
+                    </div>
+
+                    {/* Email Address */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                          isExpired
+                            ? "bg-muted-foreground"
+                            : "bg-neon-green animate-pulse"
+                        }`}
+                      />
+                      <span className="font-mono text-sm truncate">
+                        {inbox.emailAddress}
+                      </span>
+                      {inbox.forwardingEnabled && (
+                        <Forward className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      )}
+                    </div>
+
+                    {/* Tags */}
+                    <div className="w-24 flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      {inbox.tags && inbox.tags.length > 0 ? (
+                        <div className="flex items-center gap-0.5">
+                          {inbox.tags.slice(0, 2).map(tagId => {
+                            const tag = getTagById(tagId);
+                            return tag ? (
+                              <TagBadge key={tagId} tag={tag} size="sm" />
+                            ) : null;
+                          })}
+                          {inbox.tags.length > 2 && (
+                            <span className="text-[10px] text-muted-foreground">+{inbox.tags.length - 2}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <TagSelector
+                          selectedTags={inbox.tags || []}
+                          onTagsChange={(tags) => updateInboxTags(inbox.id, tags)}
+                        />
+                      )}
+                    </div>
+
+                    {/* Message Count */}
+                    <div className="w-16 flex items-center justify-center">
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {messageCount}
+                      </Badge>
+                    </div>
+
+                    {/* Last Activity */}
+                    <div className="w-16 flex items-center justify-center text-xs text-muted-foreground">
+                      {formatLastActivity(inbox)}
+                    </div>
+
+                    {/* Expiration Timer */}
+                    <div className="w-20 flex items-center justify-center">
+                      <ExpirationTimer 
+                        expiresAt={inbox.expiresAt}
+                        onExtend={() => extendInbox(inbox.id)}
+                      />
+                    </div>
+
+                    {/* Actions (visible on hover via CSS) */}
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <Link to={`/inbox/${inbox.id}`}>
-                          <p className="font-mono text-sm mb-2 truncate hover:text-primary transition-colors">
-                            {inbox.emailAddress}
-                          </p>
-                        </Link>
-                        {inbox.forwardingEmail && (
-                          <p className="text-xs text-muted-foreground mb-2 truncate">
-                            → {inbox.forwardingEmail}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground mb-4">
-                          Last activity: {formatLastActivity(inbox)}
-                        </p>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => copyEmail(inbox.emailAddress)}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={(e) => copyEmail(inbox.emailAddress, e as any)}>
+                            <Copy className="h-3.5 w-3.5 mr-2" />
+                            Copy Email
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={(e) => deleteInbox(inbox.id, e as any)}
+                            className="text-destructive focus:text-destructive"
                           >
-                            <Copy className="h-3 w-3 mr-1" />
-                            Copy
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => deleteInbox(inbox.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                            <Trash2 className="h-3.5 w-3.5 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </motion.div>
                 );
               })}
 
-              {/* Create New Card */}
+              {/* Create New Row */}
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: filteredInboxes.length * 0.05 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: filteredInboxes.length * 0.02 }}
+                onClick={createInbox}
+                className="grid grid-cols-[auto_1fr] gap-4 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors border-dashed border-t border-border/50"
               >
-                <Card
-                  variant="glass"
-                  className="h-full min-h-[200px] flex items-center justify-center cursor-pointer hover:border-primary/50 transition-colors group"
-                  onClick={createInbox}
-                >
-                  <div className="text-center">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3 group-hover:bg-primary/20 transition-colors">
-                      <Plus className="h-6 w-6 text-primary" />
-                    </div>
-                    <p className="font-medium">Create New Inbox</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Generate a new disposable email
-                    </p>
-                  </div>
-                </Card>
+                <div className="w-6 flex items-center justify-center">
+                  <Plus className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex items-center text-sm text-muted-foreground">
+                  Create new inbox...
+                </div>
               </motion.div>
-            </motion.div>
+            </div>
 
             {/* Empty State */}
             {filteredInboxes.length === 0 && searchQuery && (
@@ -382,6 +549,24 @@ export default function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} inbox{selectedIds.size !== 1 ? 'es' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. All messages in these inboxes will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={bulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
