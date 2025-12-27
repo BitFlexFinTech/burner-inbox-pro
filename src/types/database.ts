@@ -48,6 +48,8 @@ export interface Inbox {
   forwardingEmail?: string;
   // SMS fields
   phoneNumber?: string;
+  // Tags
+  tags?: string[];
 }
 
 export interface Message {

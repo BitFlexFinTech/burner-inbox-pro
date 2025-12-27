@@ -133,24 +133,36 @@ const demoInboxes: Inbox[] = [
     userId: 'user_demo',
     emailAddress: 'netflix_test_7x9@burnermail.app',
     createdAt: new Date(Date.now() - 3600000).toISOString(),
-    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    expiresAt: new Date(Date.now() + 300000).toISOString(), // 5 min for demo
     isActive: true,
+    tags: ['social'],
   },
   {
     id: 'inbox_2',
     userId: 'user_demo',
     emailAddress: 'spotify_trial_42@burnermail.app',
     createdAt: new Date(Date.now() - 7200000).toISOString(),
-    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    expiresAt: new Date(Date.now() + 600000).toISOString(), // 10 min
     isActive: true,
+    tags: ['shopping'],
   },
   {
     id: 'inbox_3',
     userId: 'user_demo',
     emailAddress: 'github_signup_88@burnermail.app',
     createdAt: new Date(Date.now() - 10800000).toISOString(),
-    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    expiresAt: new Date(Date.now() - 60000).toISOString(), // Expired
     isActive: false,
+    tags: ['work'],
+  },
+  {
+    id: 'inbox_4',
+    userId: 'user_demo',
+    emailAddress: 'amazon_verify_21@burnermail.app',
+    createdAt: new Date(Date.now() - 1800000).toISOString(),
+    expiresAt: new Date(Date.now() + 1800000).toISOString(), // 30 min
+    isActive: true,
+    tags: ['shopping', 'finance'],
   },
 ];
 
@@ -504,6 +516,18 @@ class MockDatabase {
     return undefined;
   }
 
+  extendInbox(id: string, additionalMinutes: number): Inbox | undefined {
+    const inbox = this.getInbox(id);
+    if (inbox) {
+      const currentExpiry = new Date(inbox.expiresAt).getTime();
+      const now = Date.now();
+      const baseTime = currentExpiry > now ? currentExpiry : now;
+      const newExpiry = new Date(baseTime + additionalMinutes * 60 * 1000);
+      return this.updateInbox(id, { expiresAt: newExpiry.toISOString(), isActive: true });
+    }
+    return undefined;
+  }
+
   deleteInbox(id: string): boolean {
     const idx = this.state.inboxes.findIndex(i => i.id === id);
     if (idx !== -1) {
@@ -514,6 +538,45 @@ class MockDatabase {
       return true;
     }
     return false;
+  }
+
+  deleteInboxes(ids: string[]): number {
+    let deleted = 0;
+    ids.forEach(id => {
+      if (this.deleteInbox(id)) deleted++;
+    });
+    return deleted;
+  }
+
+  addTagToInbox(inboxId: string, tagId: string): Inbox | undefined {
+    const inbox = this.getInbox(inboxId);
+    if (inbox) {
+      const tags = inbox.tags || [];
+      if (!tags.includes(tagId)) {
+        return this.updateInbox(inboxId, { tags: [...tags, tagId] });
+      }
+      return inbox;
+    }
+    return undefined;
+  }
+
+  removeTagFromInbox(inboxId: string, tagId: string): Inbox | undefined {
+    const inbox = this.getInbox(inboxId);
+    if (inbox && inbox.tags) {
+      return this.updateInbox(inboxId, { tags: inbox.tags.filter(t => t !== tagId) });
+    }
+    return inbox;
+  }
+
+  bulkAddTags(inboxIds: string[], tagIds: string[]): void {
+    inboxIds.forEach(inboxId => {
+      const inbox = this.getInbox(inboxId);
+      if (inbox) {
+        const existingTags = inbox.tags || [];
+        const newTags = [...new Set([...existingTags, ...tagIds])];
+        this.updateInbox(inboxId, { tags: newTags });
+      }
+    });
   }
 
   // Messages
