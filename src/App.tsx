@@ -19,6 +19,7 @@ import PaymentCancel from "./pages/PaymentCancel";
 import Settings from "./pages/Settings";
 import AdminDashboard from "./pages/AdminDashboard";
 import ApiDocs from "./pages/ApiDocs";
+import SMSDashboard from "./pages/SMSDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const App = () => (
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/api-docs" element={<ApiDocs />} />
+                <Route path="/sms" element={<SMSDashboard />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               <AISupportWidget />

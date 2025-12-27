@@ -20,7 +20,8 @@ import {
   AlertCircle,
   Forward,
   X,
-  Code
+  Code,
+  MessageSquare
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -233,6 +234,16 @@ export default function Dashboard() {
             >
               <Inbox className="h-4 w-4" />
               Inboxes
+            </Link>
+            <Link
+              to="/sms"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <MessageSquare className="h-4 w-4" />
+              SMS
+              <Badge variant="pro" className="ml-auto text-[10px]">
+                PRO
+              </Badge>
             </Link>
             <Link
               to="/api-docs"

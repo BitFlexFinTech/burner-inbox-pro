@@ -778,6 +778,12 @@ class MockDatabase {
     return this.state.smsMessages;
   }
 
+  getAllSMSMessages(userId: string): SMSMessage[] {
+    const userInboxes = this.getInboxes(userId);
+    const inboxIds = new Set(userInboxes.map(i => i.id));
+    return this.state.smsMessages.filter(s => inboxIds.has(s.inboxId));
+  }
+
   // Forwarding Logs
   addForwardingLog(log: Omit<ForwardingLog, 'id' | 'createdAt'>): ForwardingLog {
     const newLog: ForwardingLog = {
