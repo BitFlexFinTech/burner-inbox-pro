@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -16,52 +16,41 @@ import {
   Search,
   RefreshCw,
   Crown,
-  MoreHorizontal
+  MoreHorizontal,
+  AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-// Mock data for demo
-const mockInboxes = [
-  {
-    id: "1",
-    email: "netflix_test_7x9@demoinbox.app",
-    messageCount: 3,
-    lastActivity: "2 min ago",
-    active: true,
-  },
-  {
-    id: "2",
-    email: "spotify_trial_42@demoinbox.app",
-    messageCount: 1,
-    lastActivity: "1 hour ago",
-    active: false,
-  },
-  {
-    id: "3",
-    email: "github_signup_88@demoinbox.app",
-    messageCount: 5,
-    lastActivity: "3 hours ago",
-    active: false,
-  },
-];
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuota } from "@/hooks/useQuota";
+import { db } from "@/lib/mockDatabase";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function Dashboard() {
   const { toast } = useToast();
-  const [inboxes, setInboxes] = useState(mockInboxes);
+  const { user, logout } = useAuth();
+  const { canCreateInbox, remainingInboxes, incrementQuota, isUnlimited, planConfig } = useQuota();
+  
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentPlan] = useState<"free" | "pro">("free");
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const inboxes = useMemo(() => {
+    return db.getInboxes(user?.id);
+  }, [user?.id, refreshKey]);
 
   const filteredInboxes = inboxes.filter((inbox) =>
-    inbox.email.toLowerCase().includes(searchQuery.toLowerCase())
+    inbox.emailAddress.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const createInbox = () => {
-    if (currentPlan === "free" && inboxes.length >= 1) {
-      toast({
-        title: "Inbox limit reached",
-        description: "Upgrade to Pro for unlimited inboxes.",
-        variant: "destructive",
-      });
+    if (!canCreateInbox) {
+      setShowUpgradeModal(true);
       return;
     }
 
@@ -69,18 +58,19 @@ export default function Dashboard() {
       Math.floor(Math.random() * 5)
     ];
     const randomDigits = Math.floor(Math.random() * 900) + 100;
-    const newEmail = `${randomWord}_${randomDigits}@demoinbox.app`;
+    const newEmail = `${randomWord}_${randomDigits}@burnermail.app`;
 
-    setInboxes([
-      {
-        id: Date.now().toString(),
-        email: newEmail,
-        messageCount: 0,
-        lastActivity: "Just now",
-        active: true,
-      },
-      ...inboxes,
-    ]);
+    const expiresAt = new Date(Date.now() + (planConfig?.lifespanMinutes || 5) * 60 * 1000);
+
+    db.createInbox({
+      userId: user?.id || 'guest',
+      emailAddress: newEmail,
+      expiresAt: expiresAt.toISOString(),
+      isActive: true,
+    });
+
+    incrementQuota();
+    setRefreshKey(prev => prev + 1);
 
     toast({
       title: "Inbox created!",
@@ -97,12 +87,34 @@ export default function Dashboard() {
   };
 
   const deleteInbox = (id: string) => {
-    setInboxes(inboxes.filter((inbox) => inbox.id !== id));
+    db.deleteInbox(id);
+    setRefreshKey(prev => prev + 1);
     toast({
       title: "Inbox deleted",
       description: "The inbox has been permanently removed.",
     });
   };
+
+  const formatLastActivity = (inbox: typeof inboxes[0]) => {
+    const messages = db.getMessages(inbox.id);
+    if (messages.length === 0) return "No messages";
+    
+    const latest = messages[0];
+    const diff = Date.now() - new Date(latest.receivedAt).getTime();
+    
+    if (diff < 3600000) {
+      const mins = Math.floor(diff / 60000);
+      return `${mins} min ago`;
+    } else if (diff < 86400000) {
+      const hours = Math.floor(diff / 3600000);
+      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    } else {
+      const days = Math.floor(diff / 86400000);
+      return `${days} day${days > 1 ? 's' : ''} ago`;
+    }
+  };
+
+  const currentPlan = user?.plan || 'free';
 
   return (
     <div className="min-h-screen bg-background bg-grid">
@@ -144,15 +156,16 @@ export default function Dashboard() {
           <div className="p-4 border-t border-border/50">
             <Card variant="neon" className="p-4">
               <div className="flex items-center gap-2 mb-2">
-                <Badge variant={currentPlan === "pro" ? "pro" : "free"}>
-                  {currentPlan === "pro" && <Crown className="w-3 h-3 mr-1" />}
+                <Badge variant={currentPlan === "free" ? "free" : "pro"}>
+                  {currentPlan !== "free" && <Crown className="w-3 h-3 mr-1" />}
                   {currentPlan.toUpperCase()}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mb-3">
-                {currentPlan === "free"
-                  ? "1 inbox limit"
-                  : "Unlimited inboxes"}
+                {isUnlimited 
+                  ? "Unlimited inboxes" 
+                  : `${remainingInboxes} inbox${remainingInboxes !== 1 ? 'es' : ''} remaining today`
+                }
               </p>
               {currentPlan === "free" && (
                 <Button variant="neon" size="sm" className="w-full" asChild>
@@ -164,12 +177,10 @@ export default function Dashboard() {
             <Button
               variant="ghost"
               className="w-full mt-4 justify-start text-muted-foreground"
-              asChild
+              onClick={logout}
             >
-              <Link to="/auth">
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Link>
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
             </Button>
           </div>
         </aside>
@@ -186,7 +197,11 @@ export default function Dashboard() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <Button variant="outline" size="icon">
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => setRefreshKey(prev => prev + 1)}
+                >
                   <RefreshCw className="h-4 w-4" />
                 </Button>
                 <Button
@@ -221,72 +236,76 @@ export default function Dashboard() {
               animate={{ opacity: 1 }}
               className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
             >
-              {filteredInboxes.map((inbox, index) => (
-                <motion.div
-                  key={inbox.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <Card
-                    variant={inbox.active ? "neon" : "default"}
-                    className="group cursor-pointer hover:scale-[1.02] transition-transform"
+              {filteredInboxes.map((inbox, index) => {
+                const messageCount = db.getMessages(inbox.id).length;
+                
+                return (
+                  <motion.div
+                    key={inbox.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
                   >
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              inbox.active
-                                ? "bg-neon-green animate-pulse"
-                                : "bg-muted-foreground"
-                            }`}
-                          />
-                          <Badge variant="outline" className="text-xs">
-                            {inbox.messageCount} messages
-                          </Badge>
+                    <Card
+                      variant={inbox.isActive ? "neon" : "default"}
+                      className="group cursor-pointer hover:scale-[1.02] transition-transform"
+                    >
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-2 h-2 rounded-full ${
+                                inbox.isActive
+                                  ? "bg-neon-green animate-pulse"
+                                  : "bg-muted-foreground"
+                              }`}
+                            />
+                            <Badge variant="outline" className="text-xs">
+                              {messageCount} messages
+                            </Badge>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <Link to={`/inbox/${inbox.id}`}>
-                        <p className="font-mono text-sm mb-2 truncate hover:text-primary transition-colors">
-                          {inbox.email}
+                      </CardHeader>
+                      <CardContent>
+                        <Link to={`/inbox/${inbox.id}`}>
+                          <p className="font-mono text-sm mb-2 truncate hover:text-primary transition-colors">
+                            {inbox.emailAddress}
+                          </p>
+                        </Link>
+                        <p className="text-xs text-muted-foreground mb-4">
+                          Last activity: {formatLastActivity(inbox)}
                         </p>
-                      </Link>
-                      <p className="text-xs text-muted-foreground mb-4">
-                        Last activity: {inbox.lastActivity}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() => copyEmail(inbox.email)}
-                        >
-                          <Copy className="h-3 w-3 mr-1" />
-                          Copy
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => deleteInbox(inbox.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => copyEmail(inbox.emailAddress)}
+                          >
+                            <Copy className="h-3 w-3 mr-1" />
+                            Copy
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => deleteInbox(inbox.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                );
+              })}
 
               {/* Create New Card */}
               <motion.div
@@ -323,6 +342,34 @@ export default function Dashboard() {
           </div>
         </main>
       </div>
+
+      {/* Upgrade Modal */}
+      <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
+        <DialogContent>
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 text-primary" />
+              </div>
+              <DialogTitle>Daily Limit Reached</DialogTitle>
+            </div>
+            <DialogDescription>
+              You've reached your daily inbox limit on the free plan. Upgrade to Pro for unlimited inboxes and premium features.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 pt-4">
+            <Button variant="outline" onClick={() => setShowUpgradeModal(false)}>
+              Maybe Later
+            </Button>
+            <Button variant="neon" asChild className="shimmer">
+              <Link to="/pricing">
+                <Crown className="h-4 w-4 mr-2" />
+                Upgrade to Pro
+              </Link>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
