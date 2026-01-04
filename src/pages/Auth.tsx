@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, User, ArrowRight, Chrome, Sparkles } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Chrome, Sparkles, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { login, signup } = useAuth();
   const [isLogin, setIsLogin] = useState(searchParams.get("mode") !== "signup");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -25,36 +27,71 @@ export default function Auth() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate auth
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const result = isLogin 
+        ? await login(formData.email, formData.password)
+        : await signup(formData.email, formData.password, formData.name);
 
-    toast({
-      title: isLogin ? "Welcome back!" : "Account created!",
-      description: "Redirecting to dashboard...",
-    });
-
-    setIsLoading(false);
-    navigate("/dashboard");
+      if (result.success) {
+        toast({
+          title: isLogin ? "Welcome back!" : "Account created!",
+          description: "Redirecting to dashboard...",
+        });
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Authentication failed",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDemoLogin = async (type: "user" | "admin") => {
+  const handleDemoLogin = async (type: "user" | "admin" | "enterprise") => {
     setIsLoading(true);
     
-    const credentials = type === "admin" 
-      ? { email: "demo.admin@demoinbox.app", password: "DemoAdmin123!" }
-      : { email: "demo.user@demoinbox.app", password: "DemoUser123!" };
+    const credentials = {
+      user: { email: "demo@burnermail.app", password: "" },
+      admin: { email: "demo@burnermail.app", password: "" },
+      enterprise: { email: "tadii@bitflex.app", password: "12345678" },
+    }[type];
 
-    setFormData({ ...formData, ...credentials });
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    toast({
-      title: `Logged in as Demo ${type === "admin" ? "Admin" : "User"}`,
-      description: "Redirecting...",
-    });
-
-    setIsLoading(false);
-    navigate(type === "admin" ? "/admin" : "/dashboard");
+    try {
+      const result = await login(credentials.email, credentials.password);
+      
+      if (result.success) {
+        toast({
+          title: type === "enterprise" 
+            ? "Logged in as Enterprise Admin" 
+            : `Logged in as Demo ${type === "admin" ? "Admin" : "User"}`,
+          description: "Redirecting...",
+        });
+        navigate(type === "user" ? "/dashboard" : "/admin");
+      } else {
+        toast({
+          title: "Login Failed",
+          description: result.error,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Login failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -110,6 +147,15 @@ export default function Auth() {
               >
                 <Sparkles className="mr-2 h-4 w-4 text-secondary" />
                 Login as Demo Admin
+              </Button>
+              <Button
+                variant="neon-magenta"
+                className="w-full justify-start"
+                onClick={() => handleDemoLogin("enterprise")}
+                disabled={isLoading}
+              >
+                <Shield className="mr-2 h-4 w-4" />
+                Login as Enterprise Admin (tadii@bitflex.app)
               </Button>
             </div>
 

@@ -7,7 +7,21 @@ export type TranslationKey = keyof typeof translations.en;
 
 export const translations: Record<string, Record<string, string>> = {
   en: {
-    // Navigation
+    // Navigation (new format)
+    'navigation.home': 'Home',
+    'navigation.pricing': 'Pricing',
+    'navigation.dashboard': 'Dashboard',
+    'navigation.settings': 'Settings',
+    'navigation.login': 'Login',
+    'navigation.signup': 'Sign Up',
+    'navigation.logout': 'Logout',
+    'navigation.getStarted': 'Get Started',
+    'navigation.admin': 'Admin',
+    
+    // Common (new format)
+    'common.language': 'Language',
+    
+    // Navigation (old format for compatibility)
     'nav.home': 'Home',
     'nav.pricing': 'Pricing',
     'nav.dashboard': 'Dashboard',

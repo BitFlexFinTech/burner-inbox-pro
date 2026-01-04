@@ -12,19 +12,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { db } from "@/lib/mockDatabase";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { RevenueChart } from "@/components/admin/RevenueChart";
 import { UserGrowthChart } from "@/components/admin/UserGrowthChart";
 import { InboxActivityChart } from "@/components/admin/InboxActivityChart";
+import { TranslationManager } from "@/components/admin/TranslationManager";
 import type { SiteNotification, NotificationType, TargetAudience, Integration } from "@/types/database";
 import { 
   LayoutDashboard, Users, Mail, DollarSign, Activity, TrendingUp, TrendingDown,
   Wallet, Bitcoin, Bug, MessageSquare, RefreshCw, ArrowLeft,
-  CheckCircle, XCircle, Clock, Bell, Plug, Plus, Trash2, Edit, Loader2
+  CheckCircle, XCircle, Clock, Bell, Plug, Plus, Trash2, Edit, Loader2, Languages
 } from "lucide-react";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"overview" | "wallets" | "transactions" | "bugs" | "support" | "notifications" | "integrations">("overview");
+  const { effectiveIsAdmin } = useAuth();
+  const [activeTab, setActiveTab] = useState<"overview" | "wallets" | "transactions" | "bugs" | "support" | "notifications" | "integrations" | "translations">("overview");
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Wallet state
@@ -101,6 +104,7 @@ export default function AdminDashboard() {
 
   const tabs = [
     { id: "overview", label: "Overview", icon: LayoutDashboard },
+    { id: "translations", label: "Translations", icon: Languages },
     { id: "wallets", label: "Wallet Config", icon: Wallet },
     { id: "transactions", label: "Crypto Payments", icon: Bitcoin },
     { id: "notifications", label: "Notifications", icon: Bell },
@@ -333,6 +337,13 @@ export default function AdminDashboard() {
                     </Card>
                   ))}
                 </div>
+              </motion.div>
+            )}
+
+            {/* Translations */}
+            {activeTab === "translations" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <TranslationManager />
               </motion.div>
             )}
 
