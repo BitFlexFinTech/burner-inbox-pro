@@ -6,6 +6,9 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  viewAsUser: boolean;
+  effectiveIsAdmin: boolean;
+  toggleViewMode: () => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -15,6 +18,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = 'burnermail_auth_user_id';
+const VIEW_MODE_KEY = 'burnermail_view_as_user';
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -23,9 +27,15 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [viewAsUser, setViewAsUser] = useState(false);
+
+  // Effective admin status (false if viewing as user)
+  const effectiveIsAdmin = isAdmin && !viewAsUser;
 
   useEffect(() => {
     const storedUserId = localStorage.getItem(AUTH_STORAGE_KEY);
+    const storedViewMode = localStorage.getItem(VIEW_MODE_KEY);
+    
     if (storedUserId) {
       const storedUser = db.getUser(storedUserId);
       if (storedUser) {
@@ -33,16 +43,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setIsAdmin(db.isAdmin(storedUserId));
       }
     }
+    
+    if (storedViewMode === 'true') {
+      setViewAsUser(true);
+    }
   }, []);
 
-  const login = async (email: string, _password: string): Promise<{ success: boolean; error?: string }> => {
-    // In demo mode, auto-login as demo user or find/create user
+  const toggleViewMode = () => {
+    const newValue = !viewAsUser;
+    setViewAsUser(newValue);
+    localStorage.setItem(VIEW_MODE_KEY, String(newValue));
+  };
+
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     const existingUser = db.getUserByEmail(email);
+    
+    // Check if user requires password validation
+    if (db.requiresPassword(email)) {
+      if (!db.validatePassword(email, password)) {
+        return { success: false, error: 'Invalid email or password' };
+      }
+    }
     
     if (existingUser) {
       setUser(existingUser);
       setIsAdmin(db.isAdmin(existingUser.id));
+      setViewAsUser(false);
       localStorage.setItem(AUTH_STORAGE_KEY, existingUser.id);
+      localStorage.removeItem(VIEW_MODE_KEY);
+      
+      db.addAuditLog({
+        userId: existingUser.id,
+        action: 'user_login',
+        entityType: 'user',
+        entityId: existingUser.id,
+        metadata: { email },
+      });
+      
       return { success: true };
     }
 
@@ -55,7 +92,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     
     setUser(newUser);
     setIsAdmin(false);
+    setViewAsUser(false);
     localStorage.setItem(AUTH_STORAGE_KEY, newUser.id);
+    localStorage.removeItem(VIEW_MODE_KEY);
     
     db.addAuditLog({
       userId: newUser.id,
@@ -107,7 +146,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     setUser(null);
     setIsAdmin(false);
+    setViewAsUser(false);
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(VIEW_MODE_KEY);
   };
 
   const updatePlan = (plan: PlanType) => {
@@ -130,6 +171,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     isAuthenticated: !!user,
     isAdmin,
+    viewAsUser,
+    effectiveIsAdmin,
+    toggleViewMode,
     login,
     signup,
     logout,

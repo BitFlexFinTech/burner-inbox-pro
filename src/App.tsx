@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppModeProvider } from "@/contexts/AppModeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
+import { LanguageProvider } from "@/i18n/LanguageContext";
 import { AISupportWidget } from "@/components/AISupportWidget";
 import { SiteNotificationDisplay } from "@/components/SiteNotificationDisplay";
 import Index from "./pages/Index";
@@ -28,31 +29,33 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AppModeProvider>
       <AuthProvider>
-        <NotificationProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <SiteNotificationDisplay />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/inbox/:id" element={<InboxView />} />
-                <Route path="/pricing" element={<Pricing />} />
-                <Route path="/checkout" element={<Checkout />} />
-                <Route path="/payment/success" element={<PaymentSuccess />} />
-                <Route path="/payment/cancel" element={<PaymentCancel />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/api-docs" element={<ApiDocs />} />
-                <Route path="/sms" element={<SMSDashboard />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-              <AISupportWidget />
-            </BrowserRouter>
-          </TooltipProvider>
-        </NotificationProvider>
+        <LanguageProvider>
+          <NotificationProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <SiteNotificationDisplay />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/inbox/:id" element={<InboxView />} />
+                  <Route path="/pricing" element={<Pricing />} />
+                  <Route path="/checkout" element={<Checkout />} />
+                  <Route path="/payment/success" element={<PaymentSuccess />} />
+                  <Route path="/payment/cancel" element={<PaymentCancel />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="/api-docs" element={<ApiDocs />} />
+                  <Route path="/sms" element={<SMSDashboard />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+                <AISupportWidget />
+              </BrowserRouter>
+            </TooltipProvider>
+          </NotificationProvider>
+        </LanguageProvider>
       </AuthProvider>
     </AppModeProvider>
   </QueryClientProvider>

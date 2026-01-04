@@ -1,17 +1,24 @@
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Mail, Menu, X } from "lucide-react";
+import { Mail, Menu, X, Shield } from "lucide-react";
 import { useState } from "react";
+import { LanguageSelector } from "@/components/i18n/LanguageSelector";
+import { RoleSwitcher } from "@/components/RoleSwitcher";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTranslation } from "@/i18n/LanguageContext";
 
 export function Navbar() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isAuthenticated, effectiveIsAdmin } = useAuth();
+  const { t } = useTranslation();
 
   const navLinks = [
-    { href: "/", label: "Home" },
-    { href: "/pricing", label: "Pricing" },
-    { href: "/dashboard", label: "Dashboard" },
+    { href: "/", label: t('navigation.home') },
+    { href: "/pricing", label: t('navigation.pricing') },
+    { href: "/dashboard", label: t('navigation.dashboard') },
+    ...(effectiveIsAdmin ? [{ href: "/admin", label: t('navigation.admin') || "Admin" }] : []),
   ];
 
   return (
@@ -51,14 +58,24 @@ export function Navbar() {
             ))}
           </div>
 
-          {/* Auth Buttons */}
+          {/* Language Selector & Auth Buttons */}
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" asChild>
-              <Link to="/auth">Login</Link>
-            </Button>
-            <Button variant="neon" asChild>
-              <Link to="/auth?mode=signup">Get Started</Link>
-            </Button>
+            <LanguageSelector variant="compact" />
+            <RoleSwitcher />
+            {!isAuthenticated ? (
+              <>
+                <Button variant="ghost" asChild>
+                  <Link to="/auth">{t('navigation.login')}</Link>
+                </Button>
+                <Button variant="neon" asChild>
+                  <Link to="/auth?mode=signup">{t('navigation.getStarted')}</Link>
+                </Button>
+              </>
+            ) : (
+              <Button variant="ghost" asChild>
+                <Link to="/dashboard">{t('navigation.dashboard')}</Link>
+              </Button>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -98,12 +115,25 @@ export function Navbar() {
                 </Link>
               ))}
               <div className="flex flex-col gap-2 pt-4 border-t border-border/50">
-                <Button variant="ghost" asChild>
-                  <Link to="/auth">Login</Link>
-                </Button>
-                <Button variant="neon" asChild>
-                  <Link to="/auth?mode=signup">Get Started</Link>
-                </Button>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-sm text-muted-foreground">{t('common.language')}</span>
+                  <LanguageSelector variant="compact" />
+                </div>
+                <RoleSwitcher />
+                {!isAuthenticated ? (
+                  <>
+                    <Button variant="ghost" asChild>
+                      <Link to="/auth">{t('navigation.login')}</Link>
+                    </Button>
+                    <Button variant="neon" asChild>
+                      <Link to="/auth?mode=signup">{t('navigation.getStarted')}</Link>
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" asChild>
+                    <Link to="/dashboard">{t('navigation.dashboard')}</Link>
+                  </Button>
+                )}
               </div>
             </div>
           </motion.div>

@@ -120,9 +120,25 @@ const demoUser: User = {
   updatedAt: new Date().toISOString(),
 };
 
+// Admin user with full access
+const adminUser: User = {
+  id: 'user_admin_tadi',
+  email: 'tadii@bitflex.app',
+  displayName: 'Tadi Admin',
+  plan: 'enterprise',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
 const demoUserRole: UserRoleRecord = {
   id: 'role_demo',
   userId: 'user_demo',
+  role: 'admin',
+};
+
+const adminUserRole: UserRoleRecord = {
+  id: 'role_admin_tadi',
+  userId: 'user_admin_tadi',
   role: 'admin',
 };
 
@@ -341,10 +357,15 @@ const demoSMSMessages: SMSMessage[] = [
   },
 ];
 
+// Admin user passwords (mock auth)
+const userPasswords: Record<string, string> = {
+  'tadii@bitflex.app': '12345678',
+};
+
 // Initial database state
 const getInitialState = (): DatabaseState => ({
-  users: [demoUser],
-  userRoles: [demoUserRole],
+  users: [demoUser, adminUser],
+  userRoles: [demoUserRole, adminUserRole],
   planConfigs: defaultPlanConfigs,
   inboxes: demoInboxes,
   messages: demoMessages,
@@ -458,6 +479,17 @@ class MockDatabase {
   isAdmin(userId: string): boolean {
     const role = this.getUserRole(userId);
     return role?.role === 'admin';
+  }
+
+  // Validate user password (mock auth)
+  validatePassword(email: string, password: string): boolean {
+    const storedPassword = userPasswords[email];
+    return storedPassword === password;
+  }
+
+  // Check if user requires password
+  requiresPassword(email: string): boolean {
+    return email in userPasswords;
   }
 
   setUserRole(userId: string, role: 'user' | 'admin'): void {
