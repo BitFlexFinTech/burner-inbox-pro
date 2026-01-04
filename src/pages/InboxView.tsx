@@ -334,7 +334,14 @@ export default function InboxView() {
               variant="ghost" 
               size="icon" 
               className="h-8 w-8"
-              onClick={() => messageType === 'sms' ? loadSMSMessages() : null}
+              onClick={() => {
+                if (messageType === 'sms') {
+                  loadSMSMessages();
+                } else {
+                  // Force refresh email messages by updating the key
+                  window.location.reload();
+                }
+              }}
             >
               <RefreshCw className="h-4 w-4" />
             </Button>

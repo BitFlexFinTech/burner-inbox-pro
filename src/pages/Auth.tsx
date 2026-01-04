@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, User, ArrowRight, Chrome, Sparkles, Shield } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -171,9 +172,10 @@ export default function Auth() {
             </div>
 
             {/* Google OAuth */}
-            <Button variant="outline" className="w-full" disabled={isLoading}>
+            <Button variant="outline" className="w-full" disabled>
               <Chrome className="mr-2 h-4 w-4" />
               Continue with Google
+              <Badge variant="outline" className="ml-2 text-[10px]">Coming Soon</Badge>
             </Button>
 
             <div className="relative">
@@ -246,7 +248,17 @@ export default function Auth() {
 
               {isLogin && (
                 <div className="text-right">
-                  <Button variant="link" className="px-0 text-xs" type="button">
+                  <Button 
+                    variant="link" 
+                    className="px-0 text-xs" 
+                    type="button"
+                    onClick={() => {
+                      toast({
+                        title: "Password Reset",
+                        description: "A password reset link would be sent to your email.",
+                      });
+                    }}
+                  >
                     Forgot password?
                   </Button>
                 </div>

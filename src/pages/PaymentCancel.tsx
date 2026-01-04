@@ -55,7 +55,14 @@ export default function PaymentCancel() {
                   <p className="text-sm text-muted-foreground mb-3">
                     Having trouble? We're here to help.
                   </p>
-                  <Button variant="neon-ghost" size="sm">
+                  <Button 
+                    variant="neon-ghost" 
+                    size="sm"
+                    onClick={() => {
+                      // Dispatch custom event to open AI Support Widget
+                      window.dispatchEvent(new CustomEvent('open-support-widget'));
+                    }}
+                  >
                     <MessageSquare className="mr-2 h-4 w-4" />
                     Contact Support
                   </Button>
