@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { 
   User,
   Mail,
@@ -17,23 +19,125 @@ import {
   ArrowLeft,
   Crown,
   Trash2,
-  Key
+  Key,
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Settings() {
   const { toast } = useToast();
-  const [currentPlan] = useState<"free" | "pro">("free");
+  const { user, logout } = useAuth();
+  
   const [notifications, setNotifications] = useState({
     email: true,
     browser: false,
     realtime: true,
   });
 
-  const handleSave = () => {
+  // Profile form state
+  const [profileName, setProfileName] = useState(user?.displayName || "");
+  const [profileEmail, setProfileEmail] = useState(user?.email || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Dialog states
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showSignOutAllDialog, setShowSignOutAllDialog] = useState(false);
+  
+  // Form states for dialogs
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const currentPlan = user?.plan || "free";
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    // Simulate API call
+    await new Promise(r => setTimeout(r, 800));
+    setSavingProfile(false);
     toast({
       title: "Settings saved",
-      description: "Your preferences have been updated.",
+      description: "Your profile has been updated.",
+    });
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Passwords don't match",
+        description: "Please make sure your passwords match.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 8 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsProcessing(true);
+    await new Promise(r => setTimeout(r, 1000));
+    setIsProcessing(false);
+    setShowPasswordDialog(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    toast({
+      title: "Password updated",
+      description: "Your password has been changed successfully.",
+    });
+  };
+
+  const handleUpdateEmail = async () => {
+    if (!newEmail || !newEmail.includes("@")) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsProcessing(true);
+    await new Promise(r => setTimeout(r, 1000));
+    setIsProcessing(false);
+    setShowEmailDialog(false);
+    setNewEmail("");
+    toast({
+      title: "Verification email sent",
+      description: `A verification link has been sent to ${newEmail}.`,
+    });
+  };
+
+  const handleSignOutAll = async () => {
+    setIsProcessing(true);
+    await new Promise(r => setTimeout(r, 1000));
+    setIsProcessing(false);
+    setShowSignOutAllDialog(false);
+    toast({
+      title: "Signed out everywhere",
+      description: "You've been signed out of all other devices.",
+    });
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsProcessing(true);
+    await new Promise(r => setTimeout(r, 1500));
+    setIsProcessing(false);
+    setShowDeleteDialog(false);
+    logout();
+    toast({
+      title: "Account deleted",
+      description: "Your account has been permanently deleted.",
     });
   };
 
@@ -70,27 +174,29 @@ export default function Settings() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <Card variant={currentPlan === "pro" ? "neon" : "default"}>
+              <Card variant={currentPlan !== "free" ? "neon" : "default"}>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        currentPlan === "pro" ? "bg-primary/20" : "bg-muted"
+                        currentPlan !== "free" ? "bg-primary/20" : "bg-muted"
                       }`}>
                         <Crown className={`h-5 w-5 ${
-                          currentPlan === "pro" ? "text-primary" : "text-muted-foreground"
+                          currentPlan !== "free" ? "text-primary" : "text-muted-foreground"
                         }`} />
                       </div>
                       <div>
                         <CardTitle>Current Plan</CardTitle>
                         <CardDescription>
-                          {currentPlan === "pro"
+                          {currentPlan === "enterprise"
+                            ? "Full access to all features including SMS"
+                            : currentPlan === "premium"
                             ? "Unlimited access to all features"
                             : "Limited to 1 inbox"}
                         </CardDescription>
                       </div>
                     </div>
-                    <Badge variant={currentPlan === "pro" ? "pro" : "free"}>
+                    <Badge variant={currentPlan === "free" ? "free" : "pro"}>
                       {currentPlan.toUpperCase()}
                     </Badge>
                   </div>
@@ -134,18 +240,28 @@ export default function Settings() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="name">Name</Label>
-                      <Input id="name" defaultValue="Demo User" />
+                      <Input 
+                        id="name" 
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        placeholder="Your name"
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="email">Email</Label>
                       <Input
                         id="email"
                         type="email"
-                        defaultValue="demo.user@demoinbox.app"
+                        value={profileEmail}
+                        onChange={(e) => setProfileEmail(e.target.value)}
+                        placeholder="your@email.com"
                       />
                     </div>
                   </div>
-                  <Button onClick={handleSave}>Save Changes</Button>
+                  <Button onClick={handleSaveProfile} disabled={savingProfile}>
+                    {savingProfile && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Save Changes
+                  </Button>
                 </CardContent>
               </Card>
             </motion.div>
@@ -236,11 +352,19 @@ export default function Settings() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Button variant="outline" className="w-full justify-start">
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => setShowPasswordDialog(true)}
+                  >
                     <Key className="h-4 w-4 mr-2" />
                     Change Password
                   </Button>
-                  <Button variant="outline" className="w-full justify-start">
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => setShowEmailDialog(true)}
+                  >
                     <Mail className="h-4 w-4 mr-2" />
                     Update Email
                   </Button>
@@ -276,6 +400,7 @@ export default function Settings() {
                   <Button
                     variant="outline"
                     className="w-full justify-start text-destructive border-destructive/30 hover:bg-destructive/10"
+                    onClick={() => setShowSignOutAllDialog(true)}
                   >
                     <LogOut className="h-4 w-4 mr-2" />
                     Sign Out All Devices
@@ -283,6 +408,7 @@ export default function Settings() {
                   <Button
                     variant="outline"
                     className="w-full justify-start text-destructive border-destructive/30 hover:bg-destructive/10"
+                    onClick={() => setShowDeleteDialog(true)}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete Account
@@ -293,6 +419,131 @@ export default function Settings() {
           </div>
         </div>
       </div>
+
+      {/* Change Password Dialog */}
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>
+              Enter your current password and choose a new one.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Current Password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm New Password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPasswordDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleChangePassword} disabled={isProcessing}>
+              {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Update Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update Email Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Email</DialogTitle>
+            <DialogDescription>
+              Enter your new email address. We'll send a verification link.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-email">New Email Address</Label>
+              <Input
+                id="new-email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="your@newemail.com"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmailDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateEmail} disabled={isProcessing}>
+              {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Send Verification
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sign Out All Devices Dialog */}
+      <AlertDialog open={showSignOutAllDialog} onOpenChange={setShowSignOutAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out of all devices?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will sign you out of all other devices and sessions. You'll stay signed in on this device.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSignOutAll} disabled={isProcessing}>
+              {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Sign Out All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Account Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your account and remove all your data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteAccount} 
+              disabled={isProcessing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete Account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

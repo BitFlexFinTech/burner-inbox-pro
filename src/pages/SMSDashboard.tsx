@@ -267,13 +267,6 @@ export default function SMSDashboard() {
               </Badge>
             </Link>
             <Link
-              to="/api-docs"
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
-            >
-              <Code className="h-4 w-4" />
-              API Docs
-            </Link>
-            <Link
               to="/settings"
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
             >
