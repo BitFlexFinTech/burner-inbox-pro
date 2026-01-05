@@ -1,7 +1,46 @@
-import { useMemo, useCallback } from 'react';
-import { db } from '@/lib/mockDatabase';
+import { useMemo, useCallback, useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { PlanConfig } from '@/types/database';
+
+interface PlanConfig {
+  maxEmailsPerDay: number;
+  lifespanMinutes: number;
+  inboxHistory: boolean;
+  adsEnabled: boolean;
+  forwarding: boolean;
+  apiAccess: boolean;
+  smsEnabled: boolean;
+}
+
+const planConfigs: Record<string, PlanConfig> = {
+  free: {
+    maxEmailsPerDay: 1,
+    lifespanMinutes: 5,
+    inboxHistory: false,
+    adsEnabled: true,
+    forwarding: false,
+    apiAccess: false,
+    smsEnabled: false,
+  },
+  premium: {
+    maxEmailsPerDay: 999999,
+    lifespanMinutes: 1440,
+    inboxHistory: true,
+    adsEnabled: false,
+    forwarding: true,
+    apiAccess: true,
+    smsEnabled: true,
+  },
+  enterprise: {
+    maxEmailsPerDay: 999999,
+    lifespanMinutes: 43200,
+    inboxHistory: true,
+    adsEnabled: false,
+    forwarding: true,
+    apiAccess: true,
+    smsEnabled: true,
+  },
+};
 
 interface QuotaInfo {
   canCreateInbox: boolean;
@@ -9,26 +48,53 @@ interface QuotaInfo {
   emailsCreatedToday: number;
   maxEmailsPerDay: number;
   planConfig: PlanConfig | undefined;
-  incrementQuota: () => void;
-  resetQuota: () => void;
+  incrementQuota: () => Promise<void>;
+  resetQuota: () => Promise<void>;
   isUnlimited: boolean;
 }
 
 export function useQuota(): QuotaInfo {
   const { user } = useAuth();
+  const [emailsCreatedToday, setEmailsCreatedToday] = useState(0);
 
   const planConfig = useMemo(() => {
-    return db.getPlanConfig(user?.plan || 'free');
+    return planConfigs[user?.plan || 'free'];
   }, [user?.plan]);
 
-  const quota = useMemo(() => {
-    if (!user?.id) return null;
-    return db.getUserQuota(user.id);
-  }, [user?.id]);
-
-  const emailsCreatedToday = quota?.emailsCreatedToday || 0;
   const maxEmailsPerDay = planConfig?.maxEmailsPerDay || 1;
   const isUnlimited = maxEmailsPerDay >= 999999;
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchQuota();
+    }
+  }, [user?.id]);
+
+  const fetchQuota = async () => {
+    if (!user?.id) return;
+
+    const { data } = await supabase
+      .from('user_quotas')
+      .select('emails_created_today, last_reset_at')
+      .eq('user_id', user.id)
+      .single();
+
+    if (data) {
+      // Check if we need to reset (new day)
+      const lastReset = new Date(data.last_reset_at);
+      const now = new Date();
+      if (lastReset.toDateString() !== now.toDateString()) {
+        // Reset quota for new day
+        await supabase
+          .from('user_quotas')
+          .update({ emails_created_today: 0, last_reset_at: now.toISOString() })
+          .eq('user_id', user.id);
+        setEmailsCreatedToday(0);
+      } else {
+        setEmailsCreatedToday(data.emails_created_today);
+      }
+    }
+  };
 
   const canCreateInbox = useMemo(() => {
     if (isUnlimited) return true;
@@ -40,15 +106,28 @@ export function useQuota(): QuotaInfo {
     return Math.max(0, maxEmailsPerDay - emailsCreatedToday);
   }, [maxEmailsPerDay, emailsCreatedToday, isUnlimited]);
 
-  const incrementQuota = useCallback(() => {
-    if (user?.id) {
-      db.incrementUserQuota(user.id);
-    }
-  }, [user?.id]);
+  const incrementQuota = useCallback(async () => {
+    if (!user?.id) return;
 
-  const resetQuota = useCallback(() => {
-    db.resetDailyQuotas();
-  }, []);
+    const newCount = emailsCreatedToday + 1;
+    await supabase
+      .from('user_quotas')
+      .update({ emails_created_today: newCount })
+      .eq('user_id', user.id);
+    
+    setEmailsCreatedToday(newCount);
+  }, [user?.id, emailsCreatedToday]);
+
+  const resetQuota = useCallback(async () => {
+    if (!user?.id) return;
+
+    await supabase
+      .from('user_quotas')
+      .update({ emails_created_today: 0, last_reset_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+    
+    setEmailsCreatedToday(0);
+  }, [user?.id]);
 
   return {
     canCreateInbox,

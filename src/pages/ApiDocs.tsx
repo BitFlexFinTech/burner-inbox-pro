@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -12,7 +12,8 @@ import {
   FileCode,
   Lock,
   Zap,
-  Shield
+  Shield,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { FeatureGate } from '@/components/FeatureGate';
+import { supabase } from '@/integrations/supabase/client';
 
 const API_ENDPOINTS = [
   { method: 'GET', path: '/api/inboxes', description: 'List all your inboxes' },
@@ -111,10 +113,32 @@ requests.post(
 
 export default function ApiDocs() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [copiedEndpoint, setCopiedEndpoint] = useState<string | null>(null);
+  const [isCheckingAccess, setIsCheckingAccess] = useState(true);
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      if (authLoading) return;
+      
+      if (!isAuthenticated) {
+        navigate('/auth');
+        return;
+      }
+
+      // Check if user has API access (premium or enterprise)
+      if (user?.plan === 'free') {
+        // Still allow viewing but FeatureGate will handle the upgrade prompt
+      }
+
+      setIsCheckingAccess(false);
+    };
+
+    checkAccess();
+  }, [authLoading, isAuthenticated, user, navigate]);
 
   const generateApiKey = () => {
     const key = `bm_${Math.random().toString(36).substring(2)}${Date.now().toString(36)}`;
@@ -144,6 +168,14 @@ export default function ApiDocs() {
     PUT: 'bg-yellow-500/20 text-yellow-400',
     PATCH: 'bg-purple-500/20 text-purple-400',
   };
+
+  if (authLoading || isCheckingAccess) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background bg-grid">

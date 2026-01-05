@@ -1,6 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { db } from '@/lib/mockDatabase';
-import type { User, PlanType } from '@/types/database';
+import { supabase } from '@/integrations/supabase/client';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+
+export type PlanType = 'free' | 'premium' | 'enterprise';
+
+interface User {
+  id: string;
+  email: string;
+  displayName: string | null;
+  plan: PlanType;
+  avatarUrl: string | null;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -8,16 +18,16 @@ interface AuthContextType {
   isAdmin: boolean;
   viewAsUser: boolean;
   effectiveIsAdmin: boolean;
+  isLoading: boolean;
   toggleViewMode: () => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
-  updatePlan: (plan: PlanType) => void;
+  logout: () => Promise<void>;
+  updatePlan: (plan: PlanType) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = 'burnermail_auth_user_id';
 const VIEW_MODE_KEY = 'burnermail_view_as_user';
 
 interface AuthProviderProps {
@@ -28,26 +38,70 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [viewAsUser, setViewAsUser] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Effective admin status (false if viewing as user)
   const effectiveIsAdmin = isAdmin && !viewAsUser;
 
   useEffect(() => {
-    const storedUserId = localStorage.getItem(AUTH_STORAGE_KEY);
     const storedViewMode = localStorage.getItem(VIEW_MODE_KEY);
-    
-    if (storedUserId) {
-      const storedUser = db.getUser(storedUserId);
-      if (storedUser) {
-        setUser(storedUser);
-        setIsAdmin(db.isAdmin(storedUserId));
-      }
-    }
-    
     if (storedViewMode === 'true') {
       setViewAsUser(true);
     }
+
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await fetchUserProfile(session.user);
+      } else {
+        setUser(null);
+        setIsAdmin(false);
+      }
+      setIsLoading(false);
+    });
+
+    // Check initial session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        await fetchUserProfile(session.user);
+      }
+      setIsLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
+
+  const fetchUserProfile = async (supabaseUser: SupabaseUser) => {
+    try {
+      // Fetch profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .single();
+
+      if (profile) {
+        setUser({
+          id: supabaseUser.id,
+          email: profile.email,
+          displayName: profile.display_name,
+          plan: (profile.plan as PlanType) || 'free',
+          avatarUrl: profile.avatar_url,
+        });
+      }
+
+      // Check admin role using RPC function
+      const { data: hasAdminRole } = await supabase.rpc('has_role', {
+        _user_id: supabaseUser.id,
+        _role: 'admin'
+      });
+      
+      setIsAdmin(hasAdminRole === true);
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    }
+  };
 
   const toggleViewMode = () => {
     const newValue = !viewAsUser;
@@ -56,114 +110,70 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const existingUser = db.getUserByEmail(email);
-    
-    // Check if user requires password validation
-    if (db.requiresPassword(email)) {
-      if (!db.validatePassword(email, password)) {
-        return { success: false, error: 'Invalid email or password' };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
       }
-    }
-    
-    if (existingUser) {
-      setUser(existingUser);
-      setIsAdmin(db.isAdmin(existingUser.id));
-      setViewAsUser(false);
-      localStorage.setItem(AUTH_STORAGE_KEY, existingUser.id);
-      localStorage.removeItem(VIEW_MODE_KEY);
-      
-      db.addAuditLog({
-        userId: existingUser.id,
-        action: 'user_login',
-        entityType: 'user',
-        entityId: existingUser.id,
-        metadata: { email },
-      });
-      
+
+      if (data.user) {
+        await fetchUserProfile(data.user);
+      }
+
       return { success: true };
+    } catch (error) {
+      return { success: false, error: 'An unexpected error occurred' };
     }
-
-    // Create new user on login attempt (demo mode simplification)
-    const newUser = db.createUser({
-      email,
-      displayName: email.split('@')[0],
-      plan: 'free',
-    });
-    
-    setUser(newUser);
-    setIsAdmin(false);
-    setViewAsUser(false);
-    localStorage.setItem(AUTH_STORAGE_KEY, newUser.id);
-    localStorage.removeItem(VIEW_MODE_KEY);
-    
-    db.addAuditLog({
-      userId: newUser.id,
-      action: 'user_login',
-      entityType: 'user',
-      entityId: newUser.id,
-      metadata: { email },
-    });
-
-    return { success: true };
   };
 
-  const signup = async (email: string, _password: string, displayName?: string): Promise<{ success: boolean; error?: string }> => {
-    const existingUser = db.getUserByEmail(email);
-    if (existingUser) {
-      return { success: false, error: 'User already exists with this email' };
-    }
-
-    const newUser = db.createUser({
-      email,
-      displayName: displayName || email.split('@')[0],
-      plan: 'free',
-    });
-
-    setUser(newUser);
-    setIsAdmin(false);
-    localStorage.setItem(AUTH_STORAGE_KEY, newUser.id);
-
-    db.addAuditLog({
-      userId: newUser.id,
-      action: 'user_signup',
-      entityType: 'user',
-      entityId: newUser.id,
-      metadata: { email },
-    });
-
-    return { success: true };
-  };
-
-  const logout = () => {
-    if (user) {
-      db.addAuditLog({
-        userId: user.id,
-        action: 'user_logout',
-        entityType: 'user',
-        entityId: user.id,
-        metadata: {},
+  const signup = async (email: string, password: string, displayName?: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            display_name: displayName || email.split('@')[0],
+          },
+        },
       });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      if (data.user) {
+        await fetchUserProfile(data.user);
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: 'An unexpected error occurred' };
     }
+  };
+
+  const logout = async () => {
+    setViewAsUser(false);
+    localStorage.removeItem(VIEW_MODE_KEY);
+    await supabase.auth.signOut();
     setUser(null);
     setIsAdmin(false);
-    setViewAsUser(false);
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    localStorage.removeItem(VIEW_MODE_KEY);
   };
 
-  const updatePlan = (plan: PlanType) => {
-    if (user) {
-      const updated = db.updateUser(user.id, { plan });
-      if (updated) {
-        setUser(updated);
-        db.addAuditLog({
-          userId: user.id,
-          action: 'plan_updated',
-          entityType: 'user',
-          entityId: user.id,
-          metadata: { newPlan: plan },
-        });
-      }
+  const updatePlan = async (plan: PlanType) => {
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ plan, updated_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    if (!error) {
+      setUser({ ...user, plan });
     }
   };
 
@@ -173,6 +183,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAdmin,
     viewAsUser,
     effectiveIsAdmin,
+    isLoading,
     toggleViewMode,
     login,
     signup,

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, User, ArrowRight, Chrome, Sparkles, Shield } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Chrome, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -57,44 +57,6 @@ export default function Auth() {
     }
   };
 
-  const handleDemoLogin = async (type: "user" | "admin" | "enterprise") => {
-    setIsLoading(true);
-    
-    const credentials = {
-      user: { email: "demo@burnermail.app", password: "" },
-      admin: { email: "demo@burnermail.app", password: "" },
-      enterprise: { email: "tadii@bitflex.app", password: "12345678" },
-    }[type];
-
-    try {
-      const result = await login(credentials.email, credentials.password);
-      
-      if (result.success) {
-        toast({
-          title: type === "enterprise" 
-            ? "Logged in as Enterprise Admin" 
-            : `Logged in as Demo ${type === "admin" ? "Admin" : "User"}`,
-          description: "Redirecting...",
-        });
-        navigate(type === "user" ? "/dashboard" : "/admin");
-      } else {
-        toast({
-          title: "Login Failed",
-          description: result.error,
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Login failed",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background bg-grid relative flex items-center justify-center p-4">
       {/* Background effects */}
@@ -129,48 +91,6 @@ export default function Auth() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Demo Login Buttons */}
-            <div className="space-y-2">
-              <Button
-                variant="glass"
-                className="w-full justify-start"
-                onClick={() => handleDemoLogin("user")}
-                disabled={isLoading}
-              >
-                <Sparkles className="mr-2 h-4 w-4 text-primary" />
-                Login as Demo User
-              </Button>
-              <Button
-                variant="glass"
-                className="w-full justify-start"
-                onClick={() => handleDemoLogin("admin")}
-                disabled={isLoading}
-              >
-                <Sparkles className="mr-2 h-4 w-4 text-secondary" />
-                Login as Demo Admin
-              </Button>
-              <Button
-                variant="neon-magenta"
-                className="w-full justify-start"
-                onClick={() => handleDemoLogin("enterprise")}
-                disabled={isLoading}
-              >
-                <Shield className="mr-2 h-4 w-4" />
-                Login as Enterprise Admin (tadii@bitflex.app)
-              </Button>
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
             {/* Google OAuth */}
             <Button variant="outline" className="w-full" disabled>
               <Chrome className="mr-2 h-4 w-4" />
@@ -242,6 +162,7 @@ export default function Auth() {
                       setFormData({ ...formData, password: e.target.value })
                     }
                     required
+                    minLength={6}
                   />
                 </div>
               </div>
@@ -271,7 +192,10 @@ export default function Auth() {
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  "Loading..."
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
                 ) : (
                   <>
                     {isLogin ? "Sign In" : "Create Account"}
