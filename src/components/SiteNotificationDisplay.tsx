@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { X, Bell, AlertTriangle, Info } from 'lucide-react';
+import { X, Bell, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -22,7 +22,6 @@ export function SiteNotificationDisplay() {
           onClick: () => dismissNotification(n.id),
         },
       });
-      // Auto-dismiss after showing
       setTimeout(() => dismissNotification(n.id), 100);
     });
   }, [notifications, dismissNotification]);
@@ -32,7 +31,6 @@ export function SiteNotificationDisplay() {
 
   return (
     <>
-      {/* Banner Notifications */}
       {bannerNotifications.map(notification => (
         <div
           key={notification.id}
@@ -62,7 +60,6 @@ export function SiteNotificationDisplay() {
         </div>
       ))}
 
-      {/* Modal Notifications */}
       {modalNotifications.map(notification => (
         <Dialog 
           key={notification.id} 
