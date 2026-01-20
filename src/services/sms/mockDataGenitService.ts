@@ -1,6 +1,5 @@
 // Mock DataGenit SMS service for demo/testing
 
-import { db } from '@/lib/mockDatabase';
 import type { SMSMessage } from '@/types/database';
 
 interface PhoneNumber {
