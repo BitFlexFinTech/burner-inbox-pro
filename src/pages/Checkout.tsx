@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -15,12 +15,13 @@ import {
   Shield,
   Wallet,
   Loader2,
-  ExternalLink
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { mockStripeService, mockPayPalService, mockCryptoService, mockMetaMaskService } from "@/services/payments";
-import { db } from "@/lib/mockDatabase";
+import type { AdminWallet, AdminWalletRow } from "@/types/database";
+import { transformAdminWallet } from "@/types/database";
 
 type PaymentMethod = "stripe" | "paypal" | "btc" | "usdt" | "eth" | "zcash" | "metamask";
 
@@ -32,8 +33,54 @@ export default function Checkout() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [metaMaskConnected, setMetaMaskConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
+  const [adminWallets, setAdminWallets] = useState<AdminWallet[]>([]);
+  const [walletsLoading, setWalletsLoading] = useState(true);
 
-  const adminWallets = db.getAdminWallets();
+  // Fetch admin wallets from Supabase
+  useEffect(() => {
+    const fetchWallets = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('admin_wallets')
+          .select('*')
+          .eq('is_active', true)
+          .order('currency');
+
+        if (error) throw error;
+
+        const transformed = (data || []).map((row) => 
+          transformAdminWallet(row as AdminWalletRow)
+        );
+        setAdminWallets(transformed);
+      } catch (error) {
+        console.error('Error fetching wallets:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load payment options",
+          variant: "destructive",
+        });
+      } finally {
+        setWalletsLoading(false);
+      }
+    };
+
+    fetchWallets();
+
+    // Subscribe to wallet changes (real-time)
+    const channel = supabase
+      .channel('admin_wallets_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'admin_wallets' },
+        () => fetchWallets()
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [toast]);
+
   const btcWallet = adminWallets.find(w => w.currency === 'BTC');
   const usdtWallet = adminWallets.find(w => w.currency === 'USDT');
   const ethWallet = adminWallets.find(w => w.currency === 'ETH');
@@ -54,18 +101,33 @@ export default function Checkout() {
     });
   };
 
+  // Helper to log audit events
+  const logAuditEvent = async (action: string, entityType: string, entityId: string, metadata: Record<string, unknown>) => {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
+
+      await supabase.from('audit_logs').insert([{
+        user_id: currentUser.id,
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+        metadata: metadata as unknown as Record<string, never>,
+      }]);
+    } catch (error) {
+      console.error('Failed to log audit event:', error);
+    }
+  };
+
   const handleStripeCheckout = async () => {
     setIsProcessing(true);
     try {
       const session = await mockStripeService.createCheckoutSession(user?.id || 'guest');
       
       // Log the transaction
-      db.addAuditLog({
-        userId: user?.id,
-        action: 'payment_initiated',
-        entityType: 'subscription',
-        entityId: session.id,
-        metadata: { provider: 'stripe', amount: 5 },
+      await logAuditEvent('payment_initiated', 'subscription', session.id, { 
+        provider: 'stripe', 
+        amount: 5 
       });
 
       updatePlan('premium');
@@ -88,12 +150,9 @@ export default function Checkout() {
       await mockPayPalService.simulateApproval(order.id);
       await mockPayPalService.captureOrder(order.id);
       
-      db.addAuditLog({
-        userId: user?.id,
-        action: 'payment_completed',
-        entityType: 'subscription',
-        entityId: order.id,
-        metadata: { provider: 'paypal', amount: 5 },
+      await logAuditEvent('payment_completed', 'subscription', order.id, { 
+        provider: 'paypal', 
+        amount: 5 
       });
 
       updatePlan('premium');
@@ -143,13 +202,14 @@ export default function Checkout() {
       
       await mockMetaMaskService.waitForTransaction(tx.hash);
       
-      db.createCryptoTransaction({
-        userId: user?.id || 'guest',
+      // Create crypto transaction in Supabase
+      await supabase.from('crypto_transactions').insert({
+        user_id: user?.id || '',
         currency: 'ETH',
-        walletAddress: ethWallet?.address || '',
+        wallet_address: ethWallet?.address || '',
         amount: cryptoAmounts.eth,
-        amountUsd: 5,
-        txHash: tx.hash,
+        amount_usd: 5,
+        tx_hash: tx.hash,
         status: 'confirmed',
       });
 
@@ -206,6 +266,16 @@ export default function Checkout() {
     { id: 'metamask', label: 'MetaMask', sublabel: 'Pay with Web3 wallet', icon: <Wallet className="h-6 w-6 text-[#f6851b]" />, color: '#f6851b' },
   ];
 
+  if (walletsLoading) {
+    return (
+      <MainLayout showFooter={false}>
+        <div className="min-h-[80vh] flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout showFooter={false}>
       <div className="min-h-[80vh] py-12">
@@ -257,7 +327,7 @@ export default function Checkout() {
                       paymentMethod === option.id ? "ring-2" : ""
                     }`}
                     style={{ 
-                      ['--tw-ring-color' as any]: paymentMethod === option.id ? option.color : undefined 
+                      ['--tw-ring-color' as string]: paymentMethod === option.id ? option.color : undefined 
                     }}
                     onClick={() => setPaymentMethod(option.id)}
                   >
@@ -388,12 +458,13 @@ export default function Checkout() {
                       </div>
                       <div className="flex items-center gap-2">
                         <code className="flex-1 p-3 bg-muted rounded-lg text-xs font-mono break-all">
-                          {btcWallet?.address}
+                          {btcWallet?.address || 'No BTC wallet configured'}
                         </code>
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => copyAddress(btcWallet?.address || '')}
+                          disabled={!btcWallet?.address}
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
@@ -402,7 +473,7 @@ export default function Checkout() {
                         variant="neon"
                         className="w-full"
                         onClick={() => handleCryptoPayment('BTC')}
-                        disabled={isProcessing}
+                        disabled={isProcessing || !btcWallet?.address}
                       >
                         {isProcessing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                         {isProcessing ? "Waiting for confirmation..." : "I've Sent the Payment"}
@@ -434,12 +505,13 @@ export default function Checkout() {
                       </div>
                       <div className="flex items-center gap-2">
                         <code className="flex-1 p-3 bg-muted rounded-lg text-xs font-mono break-all">
-                          {usdtWallet?.address}
+                          {usdtWallet?.address || 'No USDT wallet configured'}
                         </code>
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => copyAddress(usdtWallet?.address || '')}
+                          disabled={!usdtWallet?.address}
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
@@ -448,7 +520,7 @@ export default function Checkout() {
                         variant="neon"
                         className="w-full"
                         onClick={() => handleCryptoPayment('USDT')}
-                        disabled={isProcessing}
+                        disabled={isProcessing || !usdtWallet?.address}
                       >
                         {isProcessing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                         {isProcessing ? "Waiting for confirmation..." : "I've Sent the Payment"}
@@ -480,12 +552,13 @@ export default function Checkout() {
                       </div>
                       <div className="flex items-center gap-2">
                         <code className="flex-1 p-3 bg-muted rounded-lg text-xs font-mono break-all">
-                          {ethWallet?.address}
+                          {ethWallet?.address || 'No ETH wallet configured'}
                         </code>
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => copyAddress(ethWallet?.address || '')}
+                          disabled={!ethWallet?.address}
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
@@ -494,7 +567,7 @@ export default function Checkout() {
                         variant="neon"
                         className="w-full"
                         onClick={() => handleCryptoPayment('ETH')}
-                        disabled={isProcessing}
+                        disabled={isProcessing || !ethWallet?.address}
                       >
                         {isProcessing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                         {isProcessing ? "Waiting for confirmation..." : "I've Sent the Payment"}
@@ -526,12 +599,13 @@ export default function Checkout() {
                       </div>
                       <div className="flex items-center gap-2">
                         <code className="flex-1 p-3 bg-muted rounded-lg text-xs font-mono break-all">
-                          {zcashWallet?.address}
+                          {zcashWallet?.address || 'No ZCASH wallet configured'}
                         </code>
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => copyAddress(zcashWallet?.address || '')}
+                          disabled={!zcashWallet?.address}
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
@@ -540,7 +614,7 @@ export default function Checkout() {
                         variant="neon"
                         className="w-full"
                         onClick={() => handleCryptoPayment('ZCASH')}
-                        disabled={isProcessing}
+                        disabled={isProcessing || !zcashWallet?.address}
                       >
                         {isProcessing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                         {isProcessing ? "Waiting for confirmation..." : "I've Sent the Payment"}

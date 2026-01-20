@@ -4,11 +4,8 @@ import { Lock, Crown, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { db } from '@/lib/mockDatabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { cn } from '@/lib/utils';
-
-type Feature = 'sms' | 'inboxHistory' | 'forwarding' | 'apiAccess' | 'adsEnabled';
+import { PLAN_FEATURES, PlanType, Feature } from '@/types/database';
 
 interface FeatureGateProps {
   feature: Feature;
@@ -77,12 +74,11 @@ export function FeatureGate({
   className,
 }: FeatureGateProps) {
   const { user } = useAuth();
-  const planConfig = db.getPlanConfig(user?.plan || 'free');
+  const userPlan = (user?.plan || 'free') as PlanType;
+  const planConfig = PLAN_FEATURES[userPlan];
 
   // Check if feature is enabled for the user's plan
   const hasAccess = (() => {
-    if (!planConfig) return false;
-    
     switch (feature) {
       case 'sms':
         return planConfig.smsEnabled;
@@ -127,11 +123,10 @@ export function FeatureCheck({
   children: ReactNode;
 }) {
   const { user } = useAuth();
-  const planConfig = db.getPlanConfig(user?.plan || 'free');
+  const userPlan = (user?.plan || 'free') as PlanType;
+  const planConfig = PLAN_FEATURES[userPlan];
 
   const hasAccess = (() => {
-    if (!planConfig) return false;
-    
     switch (feature) {
       case 'sms':
         return planConfig.smsEnabled;
