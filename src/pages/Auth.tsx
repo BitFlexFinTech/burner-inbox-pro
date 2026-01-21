@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, User, ArrowRight, Chrome, Loader2 } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Chrome, Loader2, Shield, Crown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43,6 +43,45 @@ export default function Auth() {
         toast({
           title: "Error",
           description: result.error || "Authentication failed",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async (type: 'user' | 'premium' | 'admin') => {
+    setIsLoading(true);
+    
+    const credentials = {
+      user: { email: 'demo.user@demoinbox.app', password: 'DemoUser123!' },
+      premium: { email: 'demo.premium@demoinbox.app', password: 'DemoPremium123!' },
+      admin: { email: 'demo.admin@demoinbox.app', password: 'DemoAdmin123!' },
+    };
+    
+    const selected = credentials[type];
+    
+    try {
+      const result = await login(selected.email, selected.password);
+      
+      if (result.success) {
+        const labels = { user: 'User', premium: 'Premium User', admin: 'Admin' };
+        toast({
+          title: `Welcome, Demo ${labels[type]}!`,
+          description: "Redirecting to dashboard...",
+        });
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Demo Login Failed",
+          description: result.error || "Could not log in with demo account",
           variant: "destructive",
         });
       }
@@ -97,6 +136,48 @@ export default function Auth() {
               Continue with Google
               <Badge variant="outline" className="ml-2 text-[10px]">Coming Soon</Badge>
             </Button>
+
+            {/* Demo Account Quick Login - 3 Buttons */}
+            <div className="space-y-2">
+              <p className="text-xs text-center text-muted-foreground">
+                Try the app instantly with demo accounts:
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => handleDemoLogin('user')}
+                >
+                  <User className="mr-1 h-3 w-3" />
+                  Demo User
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs border-secondary/50 text-secondary-foreground bg-secondary/10"
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => handleDemoLogin('premium')}
+                >
+                  <Crown className="mr-1 h-3 w-3" />
+                  Demo Premium
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs border-primary/50 text-primary"
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => handleDemoLogin('admin')}
+                >
+                  <Shield className="mr-1 h-3 w-3" />
+                  Demo Admin
+                </Button>
+              </div>
+            </div>
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
