@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, User, ArrowRight, Chrome, Loader2, Shield, Crown } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Chrome, Loader2, Shield, Crown, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { WalletModal } from "@/components/WalletModal";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
+import { WalletType } from "@/services/wallet/walletService";
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
@@ -17,12 +20,37 @@ export default function Auth() {
   const { login, signup } = useAuth();
   const [isLogin, setIsLogin] = useState(searchParams.get("mode") !== "signup");
   const [isLoading, setIsLoading] = useState(false);
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [connectingWallet, setConnectingWallet] = useState<WalletType | null>(null);
+  const { loginWithWallet, isConnecting: isWalletConnecting } = useWalletAuth();
 
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     name: "",
   });
+
+  // Handle wallet login
+  const handleWalletLogin = async (walletType: WalletType) => {
+    setConnectingWallet(walletType);
+    const result = await loginWithWallet(walletType);
+    
+    if (result.success) {
+      toast({ 
+        title: result.isNewUser ? "Wallet Connected!" : "Welcome back!", 
+        description: "Redirecting to dashboard..." 
+      });
+      setWalletModalOpen(false);
+      navigate("/dashboard");
+    } else {
+      toast({ 
+        title: "Connection Failed", 
+        description: result.error || "Could not authenticate with wallet", 
+        variant: "destructive" 
+      });
+    }
+    setConnectingWallet(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,6 +158,21 @@ export default function Auth() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Wallet Login */}
+            <Button 
+              variant="outline" 
+              className="w-full border-primary/30 hover:bg-primary/5"
+              onClick={() => setWalletModalOpen(true)}
+              disabled={isLoading || isWalletConnecting}
+            >
+              {isWalletConnecting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Wallet className="mr-2 h-4 w-4" />
+              )}
+              Login with Wallet
+            </Button>
+
             {/* Google OAuth */}
             <Button variant="outline" className="w-full" disabled>
               <Chrome className="mr-2 h-4 w-4" />
@@ -299,6 +342,15 @@ export default function Auth() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Wallet Connection Modal */}
+      <WalletModal
+        isOpen={walletModalOpen}
+        onClose={() => setWalletModalOpen(false)}
+        onSelectWallet={handleWalletLogin}
+        isConnecting={isWalletConnecting}
+        connectingWallet={connectingWallet}
+      />
     </div>
   );
 }
