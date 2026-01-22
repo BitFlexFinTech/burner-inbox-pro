@@ -10,6 +10,7 @@ interface User {
   displayName: string | null;
   plan: PlanType;
   avatarUrl: string | null;
+  walletAddress: string | null;
 }
 
 interface AuthContextType {
@@ -74,7 +75,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const fetchUserProfile = async (supabaseUser: SupabaseUser) => {
     try {
-      // Fetch profile
+      // Fetch profile including wallet_address
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -88,6 +89,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           displayName: profile.display_name,
           plan: (profile.plan as PlanType) || 'free',
           avatarUrl: profile.avatar_url,
+          walletAddress: (profile as { wallet_address?: string }).wallet_address || null,
         });
       }
 

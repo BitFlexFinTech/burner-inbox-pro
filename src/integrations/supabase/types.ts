@@ -280,6 +280,7 @@ export type Database = {
           id: string
           plan: string | null
           updated_at: string | null
+          wallet_address: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -289,6 +290,7 @@ export type Database = {
           id: string
           plan?: string | null
           updated_at?: string | null
+          wallet_address?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -298,6 +300,7 @@ export type Database = {
           id?: string
           plan?: string | null
           updated_at?: string | null
+          wallet_address?: string | null
         }
         Relationships: []
       }
@@ -461,6 +464,74 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      wallet_nonces: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          nonce: string
+          used: boolean | null
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          nonce: string
+          used?: boolean | null
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          nonce?: string
+          used?: boolean | null
+          wallet_address?: string
+        }
+        Relationships: []
+      }
+      wallet_sessions: {
+        Row: {
+          created_at: string | null
+          device_info: Json | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          last_active: string | null
+          user_id: string | null
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string | null
+          device_info?: Json | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_active?: string | null
+          user_id?: string | null
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string | null
+          device_info?: Json | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_active?: string | null
+          user_id?: string | null
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
