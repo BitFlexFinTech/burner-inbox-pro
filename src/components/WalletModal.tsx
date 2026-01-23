@@ -1,12 +1,13 @@
 /**
  * WalletModal - Modal component for selecting and connecting Web3 wallets
  * Displays available wallets with installation status and deep links
+ * Includes WalletConnect for QR code mobile connections
  */
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { detectWallets, WalletType, WalletInfo } from "@/services/wallet/walletService";
-import { Loader2, ExternalLink, Wallet, CheckCircle2 } from "lucide-react";
+import { Loader2, ExternalLink, Wallet, CheckCircle2, QrCode, Smartphone } from "lucide-react";
 
 interface WalletModalProps {
   isOpen: boolean;
@@ -61,6 +62,18 @@ const WalletIcons: Record<WalletType, React.ReactNode> = {
       <ellipse cx="20" cy="24" rx="4" ry="2" fill="white"/>
     </svg>
   ),
+  walletconnect: (
+    <svg viewBox="0 0 40 40" className="w-8 h-8">
+      <defs>
+        <linearGradient id="wc-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#3B99FC"/>
+          <stop offset="100%" stopColor="#2B6CB0"/>
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="36" height="36" rx="10" fill="url(#wc-gradient)"/>
+      <path fill="white" d="M12.5 16c4.1-4 10.8-4 15 0l.5.5c.2.2.2.5 0 .7l-1.7 1.6c-.1.1-.3.1-.4 0l-.7-.7c-2.9-2.8-7.5-2.8-10.4 0l-.7.7c-.1.1-.3.1-.4 0L12 17.2c-.2-.2-.2-.5 0-.7l.5-.5zm18.5 3.4l1.5 1.5c.2.2.2.5 0 .7l-6.8 6.6c-.2.2-.5.2-.7 0l-4.8-4.7c0-.1-.1-.1-.2 0l-4.8 4.7c-.2.2-.5.2-.7 0l-6.8-6.6c-.2-.2-.2-.5 0-.7l1.5-1.5c.2-.2.5-.2.7 0l4.8 4.7c0 .1.1.1.2 0l4.8-4.7c.2-.2.5-.2.7 0l4.8 4.7c0 .1.1.1.2 0l4.8-4.7c.2-.2.5-.2.7 0z"/>
+    </svg>
+  ),
 };
 
 export function WalletModal({ 
@@ -71,11 +84,15 @@ export function WalletModal({
   connectingWallet 
 }: WalletModalProps) {
   const wallets = detectWallets();
-  const installedWallets = wallets.filter(w => w.installed);
-  const notInstalledWallets = wallets.filter(w => !w.installed);
+  
+  // Separate browser wallets and WalletConnect
+  const browserWallets = wallets.filter(w => w.type !== 'walletconnect');
+  const walletConnect = wallets.find(w => w.type === 'walletconnect');
+  const installedBrowserWallets = browserWallets.filter(w => w.installed);
+  const notInstalledWallets = browserWallets.filter(w => !w.installed);
 
   const handleWalletClick = (wallet: WalletInfo) => {
-    if (wallet.installed) {
+    if (wallet.installed || wallet.type === 'walletconnect') {
       onSelectWallet(wallet.type);
     } else {
       window.open(wallet.deepLink, '_blank', 'noopener,noreferrer');
@@ -96,13 +113,42 @@ export function WalletModal({
         </DialogHeader>
         
         <div className="space-y-4 py-4">
-          {/* Installed Wallets Section */}
-          {installedWallets.length > 0 && (
+          {/* WalletConnect - Featured Option */}
+          {walletConnect && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium flex items-center gap-1.5">
+                <Smartphone className="h-3 w-3" />
+                Mobile Wallets
+              </p>
+              <Button
+                variant="outline"
+                className="w-full justify-start h-16 hover:bg-accent/50 transition-colors border-primary/30 hover:border-primary/50"
+                disabled={isConnecting}
+                onClick={() => handleWalletClick(walletConnect)}
+              >
+                <div className="flex items-center gap-3 w-full">
+                  {WalletIcons[walletConnect.type]}
+                  <div className="flex-1 text-left">
+                    <span className="font-medium block">{walletConnect.name}</span>
+                    <span className="text-xs text-muted-foreground">{walletConnect.description}</span>
+                  </div>
+                  {isConnecting && connectingWallet === 'walletconnect' ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  ) : (
+                    <QrCode className="h-4 w-4 text-primary" />
+                  )}
+                </div>
+              </Button>
+            </div>
+          )}
+
+          {/* Installed Browser Wallets */}
+          {installedBrowserWallets.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-                Available Wallets
+                Browser Wallets
               </p>
-              {installedWallets.map((wallet) => (
+              {installedBrowserWallets.map((wallet) => (
                 <Button
                   key={wallet.type}
                   variant="outline"
@@ -124,11 +170,11 @@ export function WalletModal({
             </div>
           )}
 
-          {/* Not Installed Wallets Section */}
+          {/* Not Installed Wallets */}
           {notInstalledWallets.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-                {installedWallets.length > 0 ? 'Other Wallets' : 'Install a Wallet'}
+                {installedBrowserWallets.length > 0 ? 'Other Wallets' : 'Install a Wallet'}
               </p>
               {notInstalledWallets.map((wallet) => (
                 <Button
@@ -149,11 +195,11 @@ export function WalletModal({
             </div>
           )}
 
-          {/* No wallets detected at all */}
-          {wallets.every(w => !w.installed) && (
-            <div className="text-center py-4 text-sm text-muted-foreground">
-              <p className="mb-2">No Web3 wallet detected</p>
-              <p>Click on a wallet above to install it</p>
+          {/* No browser wallets detected message */}
+          {browserWallets.every(w => !w.installed) && (
+            <div className="text-center py-2 text-sm text-muted-foreground">
+              <p>No browser wallet detected.</p>
+              <p className="text-xs mt-1">Use WalletConnect above or install a browser wallet.</p>
             </div>
           )}
         </div>

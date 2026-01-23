@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { disconnectWallet } from '@/services/wallet/walletService';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 export type PlanType = 'free' | 'premium' | 'enterprise';
@@ -25,6 +26,8 @@ interface AuthContextType {
   signup: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updatePlan: (plan: PlanType) => Promise<void>;
+  unlinkWallet: () => Promise<{ success: boolean; error?: string }>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -105,6 +108,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  const refreshProfile = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await fetchUserProfile(session.user);
+    }
+  };
+
   const toggleViewMode = () => {
     const newValue = !viewAsUser;
     setViewAsUser(newValue);
@@ -161,6 +171,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = async () => {
     setViewAsUser(false);
     localStorage.removeItem(VIEW_MODE_KEY);
+    
+    // Disconnect wallet if connected
+    await disconnectWallet();
+    
     await supabase.auth.signOut();
     setUser(null);
     setIsAdmin(false);
@@ -179,6 +193,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  const unlinkWallet = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!user) {
+      return { success: false, error: 'No user logged in' };
+    }
+
+    try {
+      // Call the edge function to unlink wallet
+      const { error: functionError } = await supabase.functions.invoke('wallet-auth', {
+        body: {
+          action: 'unlink',
+          user_id: user.id,
+        }
+      });
+
+      if (functionError) {
+        throw new Error(functionError.message);
+      }
+
+      // Disconnect wallet locally
+      await disconnectWallet();
+
+      // Update local state
+      setUser({ ...user, walletAddress: null });
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to unlink wallet';
+      console.error('Error unlinking wallet:', error);
+      return { success: false, error: errorMessage };
+    }
+  };
+
   const value: AuthContextType = {
     user,
     isAuthenticated: !!user,
@@ -191,6 +237,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signup,
     logout,
     updatePlan,
+    unlinkWallet,
+    refreshProfile,
   };
 
   return (

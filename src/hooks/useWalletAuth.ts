@@ -1,6 +1,7 @@
 /**
  * useWalletAuth Hook - Orchestrates Web3 wallet authentication flow
  * Handles connection, nonce request, signature, and verification
+ * Supports browser wallets (MetaMask, Trust, Rabby) and WalletConnect
  */
 
 import { useState, useCallback } from 'react';
@@ -39,7 +40,7 @@ export function useWalletAuth(): UseWalletAuthReturn {
 
     try {
       // Step 1: Connect to the wallet and get address
-      console.log('[WalletAuth] Connecting to wallet...');
+      console.log('[WalletAuth] Connecting to wallet:', walletType);
       const connection: WalletConnection = await connectWallet(walletType);
       console.log('[WalletAuth] Connected:', connection.address);
 
@@ -60,7 +61,8 @@ export function useWalletAuth(): UseWalletAuthReturn {
       console.log('[WalletAuth] Received nonce, requesting signature...');
 
       // Step 3: Sign the nonce message with the wallet
-      const signature = await signMessage(message);
+      // Pass wallet type for WalletConnect support
+      const signature = await signMessage(message, walletType);
       console.log('[WalletAuth] Message signed, verifying...');
 
       // Step 4: Verify signature and authenticate
@@ -73,6 +75,7 @@ export function useWalletAuth(): UseWalletAuthReturn {
             userAgent: navigator.userAgent,
             platform: navigator.platform,
             language: navigator.language,
+            walletType: walletType,
           }
         }
       });
@@ -120,7 +123,7 @@ export function useWalletAuth(): UseWalletAuthReturn {
       setError(errorMessage);
       
       // Clean up on failure
-      disconnectWallet();
+      await disconnectWallet();
       
       return { 
         success: false, 

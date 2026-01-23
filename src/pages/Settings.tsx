@@ -20,14 +20,17 @@ import {
   Crown,
   Trash2,
   Key,
-  Loader2
+  Loader2,
+  Wallet,
+  Unlink
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { WalletAddressBadge } from "@/components/WalletAddressBadge";
 
 export default function Settings() {
   const { toast } = useToast();
-  const { user, logout } = useAuth();
+  const { user, logout, unlinkWallet } = useAuth();
   
   const [notifications, setNotifications] = useState({
     email: true,
@@ -45,7 +48,7 @@ export default function Settings() {
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showSignOutAllDialog, setShowSignOutAllDialog] = useState(false);
-  
+  const [showUnlinkWalletDialog, setShowUnlinkWalletDialog] = useState(false);
   // Form states for dialogs
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -139,6 +142,26 @@ export default function Settings() {
       title: "Account deleted",
       description: "Your account has been permanently deleted.",
     });
+  };
+
+  const handleUnlinkWallet = async () => {
+    setIsProcessing(true);
+    const result = await unlinkWallet();
+    setIsProcessing(false);
+    setShowUnlinkWalletDialog(false);
+    
+    if (result.success) {
+      toast({
+        title: "Wallet disconnected",
+        description: "Your wallet has been unlinked from your account.",
+      });
+    } else {
+      toast({
+        title: "Error",
+        description: result.error || "Failed to disconnect wallet.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -265,6 +288,47 @@ export default function Settings() {
                 </CardContent>
               </Card>
             </motion.div>
+
+            {/* Connected Wallet */}
+            {user?.walletAddress && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+              >
+                <Card className="border-primary/30">
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Wallet className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle>Connected Wallet</CardTitle>
+                        <CardDescription>Your linked Web3 wallet</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>Wallet Address</Label>
+                        <div className="mt-1">
+                          <WalletAddressBadge address={user.walletAddress} />
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={() => setShowUnlinkWalletDialog(true)}
+                    >
+                      <Unlink className="h-4 w-4 mr-2" />
+                      Disconnect Wallet
+                    </Button>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
 
             {/* Notifications */}
             <motion.div
@@ -540,6 +604,29 @@ export default function Settings() {
             >
               {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Delete Account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Unlink Wallet Dialog */}
+      <AlertDialog open={showUnlinkWalletDialog} onOpenChange={setShowUnlinkWalletDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disconnect wallet?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will unlink your wallet from your account. You can reconnect it later from the login page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleUnlinkWallet} 
+              disabled={isProcessing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Disconnect
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

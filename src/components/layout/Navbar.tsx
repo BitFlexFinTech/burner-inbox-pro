@@ -1,17 +1,18 @@
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Mail, Menu, X, Shield } from "lucide-react";
+import { Mail, Menu, X, Wallet } from "lucide-react";
 import { useState } from "react";
 import { LanguageSelector } from "@/components/i18n/LanguageSelector";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "@/i18n/LanguageContext";
+import { WalletAddressBadge } from "@/components/WalletAddressBadge";
 
 export function Navbar() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { isAuthenticated, effectiveIsAdmin } = useAuth();
+  const { isAuthenticated, effectiveIsAdmin, user } = useAuth();
   const { t } = useTranslation();
 
   const navLinks = [
@@ -58,10 +59,19 @@ export function Navbar() {
             ))}
           </div>
 
-          {/* Language Selector & Auth Buttons */}
+          {/* Language Selector, Wallet Badge & Auth Buttons */}
           <div className="hidden md:flex items-center gap-3">
             <LanguageSelector variant="compact" />
             <RoleSwitcher />
+            
+            {/* Show wallet address badge when authenticated with wallet */}
+            {isAuthenticated && user?.walletAddress && (
+              <WalletAddressBadge 
+                address={user.walletAddress} 
+                variant="compact"
+              />
+            )}
+            
             {!isAuthenticated ? (
               <>
                 <Button variant="ghost" asChild>
@@ -79,16 +89,27 @@ export function Navbar() {
           </div>
 
           {/* Mobile Menu Button */}
-          <button
-            className="md:hidden p-2"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? (
-              <X className="h-6 w-6" />
-            ) : (
-              <Menu className="h-6 w-6" />
+          <div className="md:hidden flex items-center gap-2">
+            {/* Mobile wallet indicator */}
+            {isAuthenticated && user?.walletAddress && (
+              <WalletAddressBadge 
+                address={user.walletAddress} 
+                variant="compact"
+                showCopyButton={false}
+                className="!px-1.5"
+              />
             )}
-          </button>
+            <button
+              className="p-2"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? (
+                <X className="h-6 w-6" />
+              ) : (
+                <Menu className="h-6 w-6" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Menu */}
@@ -120,6 +141,17 @@ export function Navbar() {
                   <LanguageSelector variant="compact" />
                 </div>
                 <RoleSwitcher />
+                
+                {/* Mobile wallet address display */}
+                {isAuthenticated && user?.walletAddress && (
+                  <div className="py-2">
+                    <WalletAddressBadge 
+                      address={user.walletAddress} 
+                      variant="default"
+                    />
+                  </div>
+                )}
+                
                 {!isAuthenticated ? (
                   <>
                     <Button variant="ghost" asChild>
