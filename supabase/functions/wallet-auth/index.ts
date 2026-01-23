@@ -195,8 +195,70 @@ serve(async (req) => {
       );
     }
 
+    // ============== ACTION: UNLINK WALLET ==============
+    if (action === 'unlink') {
+      const { user_id } = body;
+
+      if (!user_id) {
+        return new Response(
+          JSON.stringify({ error: 'Missing user_id' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get current profile to find wallet address
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .select('wallet_address')
+        .eq('id', user_id)
+        .single();
+
+      if (profileError || !profile) {
+        return new Response(
+          JSON.stringify({ error: 'Profile not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const walletAddress = (profile as { wallet_address?: string }).wallet_address;
+
+      if (!walletAddress) {
+        return new Response(
+          JSON.stringify({ error: 'No wallet linked to this account' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Clear wallet_address from profile
+      const { error: updateError } = await supabaseAdmin
+        .from('profiles')
+        .update({ wallet_address: null })
+        .eq('id', user_id);
+
+      if (updateError) {
+        console.error('Error unlinking wallet:', updateError);
+        throw updateError;
+      }
+
+      // Invalidate all wallet sessions for this user
+      await supabaseAdmin
+        .from('wallet_sessions')
+        .update({ is_active: false })
+        .eq('user_id', user_id);
+
+      console.log(`Wallet ${walletAddress} unlinked from user ${user_id}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Wallet unlinked successfully',
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use "request_nonce" or "verify".' }),
+      JSON.stringify({ error: 'Invalid action. Use "request_nonce", "verify", or "unlink".' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

@@ -1,10 +1,12 @@
 /**
  * Wallet Service - Utilities for Web3 wallet detection, connection, and signing
- * Supports MetaMask, Trust Wallet, and Rabby Wallet
+ * Supports MetaMask, Trust Wallet, Rabby Wallet, and WalletConnect
  */
 
+import { EthereumProvider } from '@walletconnect/ethereum-provider';
+
 // Wallet types supported by the application
-export type WalletType = 'metamask' | 'trust' | 'rabby';
+export type WalletType = 'metamask' | 'trust' | 'rabby' | 'walletconnect';
 
 // Information about a wallet
 export interface WalletInfo {
@@ -13,6 +15,7 @@ export interface WalletInfo {
   icon: string;
   installed: boolean;
   deepLink: string;
+  description?: string;
 }
 
 // Active wallet connection data
@@ -21,6 +24,9 @@ export interface WalletConnection {
   chainId: number;
   walletType: WalletType;
 }
+
+// WalletConnect provider instance (singleton)
+let walletConnectProvider: Awaited<ReturnType<typeof EthereumProvider.init>> | null = null;
 
 // Extend window for ethereum provider
 declare global {
@@ -36,6 +42,10 @@ declare global {
   }
 }
 
+// WalletConnect Project ID (public - can be in code)
+// Users should create their own at https://cloud.walletconnect.com for production
+const WALLETCONNECT_PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || '3a8170812b534d0ff9d794f19a901d64';
+
 /**
  * Detect which wallets are installed in the browser
  * Returns array of wallet info with installation status
@@ -43,13 +53,14 @@ declare global {
 export function detectWallets(): WalletInfo[] {
   const ethereum = window.ethereum;
   
-  return [
+  const browserWallets: WalletInfo[] = [
     {
       type: 'metamask',
       name: 'MetaMask',
       icon: '/wallets/metamask.svg',
       installed: Boolean(ethereum?.isMetaMask),
       deepLink: 'https://metamask.io/download/',
+      description: 'Popular browser extension wallet',
     },
     {
       type: 'trust',
@@ -57,6 +68,7 @@ export function detectWallets(): WalletInfo[] {
       icon: '/wallets/trust.svg',
       installed: Boolean(ethereum?.isTrust),
       deepLink: 'https://trustwallet.com/download',
+      description: 'Mobile-first crypto wallet',
     },
     {
       type: 'rabby',
@@ -64,8 +76,21 @@ export function detectWallets(): WalletInfo[] {
       icon: '/wallets/rabby.svg',
       installed: Boolean(ethereum?.isRabby),
       deepLink: 'https://rabby.io/',
+      description: 'DeFi-focused browser wallet',
     },
   ];
+
+  // WalletConnect is always available (uses QR code)
+  const walletConnect: WalletInfo = {
+    type: 'walletconnect',
+    name: 'WalletConnect',
+    icon: '/wallets/walletconnect.svg',
+    installed: true, // Always available
+    deepLink: '',
+    description: 'Scan QR with mobile wallet',
+  };
+
+  return [...browserWallets, walletConnect];
 }
 
 /**
@@ -76,11 +101,81 @@ export function isWalletAvailable(): boolean {
 }
 
 /**
+ * Initialize WalletConnect provider
+ */
+export async function initWalletConnect() {
+  if (walletConnectProvider) {
+    return walletConnectProvider;
+  }
+
+  walletConnectProvider = await EthereumProvider.init({
+    projectId: WALLETCONNECT_PROJECT_ID,
+    chains: [1], // Ethereum Mainnet
+    optionalChains: [137, 56, 42161], // Polygon, BSC, Arbitrum
+    showQrModal: true,
+    metadata: {
+      name: 'BurnerMAIL',
+      description: 'Privacy-focused temporary email service',
+      url: window.location.origin,
+      icons: [`${window.location.origin}/favicon.ico`],
+    },
+  });
+
+  return walletConnectProvider;
+}
+
+/**
+ * Connect via WalletConnect (shows QR code modal)
+ */
+export async function connectWalletConnect(): Promise<WalletConnection> {
+  try {
+    const provider = await initWalletConnect();
+    
+    // Enable the provider - this shows the QR modal
+    await provider.connect();
+    
+    const accounts = provider.accounts;
+    const chainId = provider.chainId;
+
+    if (!accounts || accounts.length === 0) {
+      throw new Error('No accounts found. Please connect your wallet.');
+    }
+
+    return {
+      address: accounts[0].toLowerCase(),
+      chainId: chainId,
+      walletType: 'walletconnect',
+    };
+  } catch (error: unknown) {
+    // Clean up on error
+    if (walletConnectProvider) {
+      try {
+        await walletConnectProvider.disconnect();
+      } catch {}
+      walletConnectProvider = null;
+    }
+    
+    if (error instanceof Error) {
+      if (error.message.includes('User rejected') || error.message.includes('rejected')) {
+        throw new Error('WalletConnect connection was rejected by user.');
+      }
+      throw error;
+    }
+    throw new Error('Failed to connect via WalletConnect.');
+  }
+}
+
+/**
  * Connect to the user's wallet and request account access
  * @param walletType - The type of wallet to connect to
  * @returns WalletConnection with address and chain info
  */
 export async function connectWallet(walletType: WalletType): Promise<WalletConnection> {
+  // Use WalletConnect for mobile QR code connection
+  if (walletType === 'walletconnect') {
+    return connectWalletConnect();
+  }
+
   const ethereum = window.ethereum;
   
   if (!ethereum) {
@@ -136,9 +231,37 @@ export async function getConnectedAccounts(): Promise<string[]> {
 /**
  * Sign a message with the user's wallet using personal_sign (EIP-191)
  * @param message - The message to sign
+ * @param walletType - The wallet type being used
  * @returns The signature
  */
-export async function signMessage(message: string): Promise<string> {
+export async function signMessage(message: string, walletType?: WalletType): Promise<string> {
+  // Use WalletConnect provider if that's the wallet type
+  if (walletType === 'walletconnect' && walletConnectProvider) {
+    try {
+      const accounts = walletConnectProvider.accounts;
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts connected via WalletConnect.');
+      }
+
+      const signature = await walletConnectProvider.request({
+        method: 'personal_sign',
+        params: [message, accounts[0]],
+      }) as string;
+
+      return signature;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        if (error.message.includes('rejected')) {
+          throw new Error('Message signing was rejected by user.');
+        }
+        throw error;
+      }
+      throw new Error('Failed to sign message via WalletConnect.');
+    }
+  }
+
+  // Use browser wallet
   const ethereum = window.ethereum;
   
   if (!ethereum) {
@@ -171,11 +294,17 @@ export async function signMessage(message: string): Promise<string> {
 }
 
 /**
- * Disconnect wallet (clear local state)
- * Note: This doesn't actually disconnect from the wallet,
- * as that's controlled by the user in the wallet itself
+ * Disconnect wallet (clear local state and WalletConnect session)
  */
-export function disconnectWallet(): void {
+export async function disconnectWallet(): Promise<void> {
+  // Disconnect WalletConnect if active
+  if (walletConnectProvider) {
+    try {
+      await walletConnectProvider.disconnect();
+    } catch {}
+    walletConnectProvider = null;
+  }
+
   localStorage.removeItem('wallet_connected');
   localStorage.removeItem('wallet_address');
   localStorage.removeItem('wallet_type');
@@ -215,4 +344,11 @@ export function getStoredWalletConnection(): WalletConnection | null {
 export function formatWalletAddress(address: string): string {
   if (!address) return '';
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+/**
+ * Get the current WalletConnect provider instance
+ */
+export function getWalletConnectProvider() {
+  return walletConnectProvider;
 }
