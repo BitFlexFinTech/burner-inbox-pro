@@ -82,19 +82,21 @@ export function AISupportWidget() {
   return (
     <>
       {/* Floating Button */}
-      <motion.button
+      <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg hover:shadow-[0_0_30px_hsl(185_100%_50%/0.5)] transition-shadow ${
-          isOpen ? "hidden" : "flex"
-        } items-center justify-center`}
+        className={`fixed bottom-6 right-6 z-50 ${isOpen ? "hidden" : "block"}`}
       >
-        <MessageSquare className="h-6 w-6" />
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-neon-green rounded-full border-2 border-background" />
-      </motion.button>
+        <button
+          onClick={() => setIsOpen(true)}
+          className="w-14 h-14 rounded-full bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg hover:shadow-[0_0_30px_hsl(185_100%_50%/0.5)] transition-shadow flex items-center justify-center"
+        >
+          <MessageSquare className="h-6 w-6" />
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-neon-green rounded-full border-2 border-background" />
+        </button>
+      </motion.div>
 
       {/* Chat Widget */}
       <AnimatePresence>
