@@ -18,6 +18,7 @@ import { RevenueChart } from "@/components/admin/RevenueChart";
 import { UserGrowthChart } from "@/components/admin/UserGrowthChart";
 import { InboxActivityChart } from "@/components/admin/InboxActivityChart";
 import { TranslationManager } from "@/components/admin/TranslationManager";
+import { StripeSetupWizard } from "@/components/admin/StripeSetupWizard";
 import { 
   LayoutDashboard, Users, Mail, DollarSign, Activity, TrendingUp, TrendingDown,
   Wallet, Bitcoin, Bug, MessageSquare, RefreshCw, ArrowLeft,
@@ -548,8 +549,19 @@ export default function AdminDashboard() {
             {activeTab === "integrations" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                 <h2 className="text-xl font-semibold">Integrations</h2>
+                
+                {/* Stripe Setup Wizard */}
+                <StripeSetupWizard 
+                  isConfigured={integrations.some(i => i.provider === 'stripe' && i.status === 'connected')}
+                  onComplete={() => {
+                    toast({ title: "Stripe Connected", description: "Payment processing is now active" });
+                    loadIntegrations();
+                  }}
+                />
+                
+                {/* Other Integrations */}
                 <div className="grid gap-4 md:grid-cols-2">
-                  {integrations.map(int => (
+                  {integrations.filter(int => int.provider !== 'stripe').map(int => (
                     <Card key={int.id}>
                       <CardContent className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
