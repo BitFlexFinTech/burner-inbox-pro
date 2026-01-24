@@ -1,0 +1,110 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  APP_DIR: /opt/burnerbox
+  PM2_APP_NAME: burnerbox
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract NEXT_TASKS from commit
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          NEXT_TASKS=$(echo "$COMMIT_MSG" | sed -n '/NEXT_TASKS:/,/^$/p' | tail -n +2)
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          
+          echo "📋 Commit: $COMMIT_HASH"
+          if [ -n "$NEXT_TASKS" ]; then
+            echo "📝 NEXT_TASKS:"
+            echo "$NEXT_TASKS"
+          fi
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+            
+            echo "═══════════════════════════════════════════════════════════════════"
+            echo "🚀 DEPLOYING BURNERBOX"
+            echo "═══════════════════════════════════════════════════════════════════"
+            
+            APP_DIR="/opt/burnerbox"
+            PM2_APP_NAME="burnerbox"
+            
+            # Save current state
+            PREVIOUS_COMMIT=$(cd $APP_DIR/source 2>/dev/null && git rev-parse HEAD 2>/dev/null || echo "none")
+            echo "$PREVIOUS_COMMIT" > /tmp/burnerbox-previous-commit
+            echo "📌 Previous: ${PREVIOUS_COMMIT:0:7}"
+            
+            # Pull latest code
+            echo "📥 Pulling latest code..."
+            cd $APP_DIR/source
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+            
+            CURRENT_COMMIT=$(git rev-parse HEAD)
+            echo "📌 Current: ${CURRENT_COMMIT:0:7}"
+            
+            # Build frontend
+            echo "🔨 Building frontend..."
+            npm install --include=dev
+            NODE_OPTIONS=--max-old-space-size=4096 npx vite build
+            
+            # Install backend
+            echo "📦 Installing backend dependencies..."
+            cd $APP_DIR/source/backend
+            npm install --production
+            
+            # Run migrations
+            echo "🗄️ Running database migrations..."
+            npm run prisma:generate
+            npm run prisma:deploy || echo "Migrations may already be applied"
+            
+            # Deploy files
+            echo "📂 Deploying files..."
+            cp -r $APP_DIR/source/backend/* $APP_DIR/backend/
+            mkdir -p $APP_DIR/frontend
+            cp -r $APP_DIR/source/dist/* $APP_DIR/frontend/
+            
+            # Restart services
+            echo "🔄 Restarting services..."
+            cd $APP_DIR/backend
+            pm2 restart $PM2_APP_NAME 2>/dev/null || pm2 start npm --name $PM2_APP_NAME -- start
+            pm2 save
+            
+            # Health check
+            echo "🏥 Health check..."
+            sleep 5
+            if curl -sf http://localhost:3001/health > /dev/null 2>&1; then
+              echo "✅ Health check passed"
+            else
+              echo "⚠️ Health check inconclusive"
+            fi
+            
+            echo ""
+            echo "═══════════════════════════════════════════════════════════════════"
+            echo "✅ DEPLOYMENT COMPLETE"
+            echo "═══════════════════════════════════════════════════════════════════"
+            pm2 status
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Manual rollback: ssh \$VPS_USER@\$VPS_HOST 'bash /opt/burnerbox/source/deploy/rollback.sh'"

@@ -1,0 +1,170 @@
+# Cursor Rules for burnerbox
+# Universal Project Bootstrap - Auto-generated 2026-01-24
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROJECT IDENTITY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+PROJECT_IDENTITY:
+  project_name: burnerbox
+  repo_url: https://github.com/BitFlexFinTech/burnerbox.git
+  deployment_branch: main
+  primary_apps:
+    - src/           # React frontend (Vite)
+    - backend/       # Node.js/Express API
+  vps_host: 155.138.212.189
+  vps_user: burnerbox-vps
+  deployment_method: PM2 + Nginx
+  app_directory: /opt/burnerbox
+  deploy_scripts_folder: deploy/
+  ci_workflow_file: .github/workflows/deploy.yml
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CURSOR BEHAVIOR RULES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+CURSOR_BEHAVIOR:
+  on_startup:
+    - Load PROJECT_BOOTSTRAP.md for context
+    - Read latest commit for NEXT_TASKS block
+    - If NEXT_TASKS found, ask user: "This is where I left off. Shall I continue with the following tasks?"
+    - List tasks and wait for approval before continuing
+
+  always:
+    - Respect NEXT_TASKS system in all commits
+    - Never store secrets in repo (use .env files, add to .gitignore)
+    - Never commit .env, credentials, API keys, or secrets
+    - Always load PROJECT_BOOTSTRAP.md for project context
+    - Prefer editing existing files over creating new ones
+
+  code_quality:
+    - Use ESLint + Prettier for JavaScript/TypeScript
+    - Follow existing code patterns in the codebase
+    - Add proper error handling for all async operations
+    - Use TypeScript types where applicable
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AUTO-COMMIT AND AUTO-PUSH RULES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+AUTO_COMMIT_AND_PUSH:
+  rules:
+    - Commit only with explicit user approval
+    - Use COMMIT_MESSAGE + NEXT_TASKS format for all commits
+    - Never force push to main branch
+    - Never skip git hooks unless explicitly requested
+
+  commit_format: |
+    <type>: <summary>
+
+    <detailed description if needed>
+
+    NEXT_TASKS:
+    - <task 1>
+    - <task 2>
+    - <task 3>
+
+  commit_types:
+    - feat     # New feature
+    - fix      # Bug fix
+    - refactor # Code refactoring
+    - perf     # Performance improvement
+    - docs     # Documentation
+    - test     # Tests
+    - chore    # Maintenance
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEXT_TASKS SYSTEM
+# ═══════════════════════════════════════════════════════════════════════════════
+
+NEXT_TASKS_SYSTEM:
+  description: |
+    Every commit must include a NEXT_TASKS block that lists what remains to be done.
+    This enables seamless resume across sessions.
+
+  rules:
+    - Every commit includes NEXT_TASKS block
+    - Preserve unfinished tasks from previous commits
+    - Add new tasks as they emerge
+    - Remove completed tasks
+    - Resume from NEXT_TASKS on project startup
+
+  on_project_open: |
+    1. Read the latest commit message
+    2. Extract the NEXT_TASKS block
+    3. Display to user: "This is where I left off. Shall I continue with these tasks?"
+    4. List all tasks
+    5. Wait for user approval before proceeding
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DEPLOYMENT RULES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+DEPLOYMENT:
+  auto_deploy:
+    - Local changes → GitHub (via git push)
+    - GitHub → VPS (via GitHub Actions)
+    - Trigger: Push to main branch
+
+  vps_structure:
+    source_code: /opt/burnerbox/source
+    backend: /opt/burnerbox/backend
+    frontend: /opt/burnerbox/frontend
+
+  process_manager: PM2
+  pm2_app_name: burnerbox
+  web_server: Nginx
+  database: SQLite (Prisma)
+
+  pre_deploy_checks:
+    - TypeScript compilation check
+    - No console.log in production code
+    - All tests passing
+    - No hardcoded secrets
+
+  post_deploy_verification:
+    - PM2 process status check
+    - Health endpoint verification (/api/health)
+    - Nginx status check
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENVIRONMENT VARIABLES (NAMES ONLY - NO VALUES)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ENVIRONMENT_VARIABLES:
+  server:
+    - NODE_ENV
+    - PORT
+    - APP_URL
+    - FRONTEND_URL
+  database:
+    - DATABASE_URL
+  authentication:
+    - JWT_SECRET
+    - JWT_REFRESH_SECRET
+    - SESSION_SECRET
+  payments:
+    - STRIPE_SECRET_KEY
+    - STRIPE_PUBLISHABLE_KEY
+    - STRIPE_WEBHOOK_SECRET
+    - FLUTTERWAVE_SECRET_KEY
+    - FLUTTERWAVE_PUBLIC_KEY
+  email:
+    - SENDGRID_API_KEY
+  infrastructure:
+    - VPS_SSH_KEY
+    - VPS_HOST
+    - VPS_USER
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FILE PATTERNS TO IGNORE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+GITIGNORE_PATTERNS:
+  - .env
+  - .env.*
+  - "*.log"
+  - node_modules/
+  - dist/
+  - "*.sqlite"
+  - "*.sqlite-journal"
